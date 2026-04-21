@@ -1,29 +1,31 @@
-# 🐾 PetCare+
+# 🐾 PetCare+ v2.0
 
-Aplikasi dashboard pemantauan kesehatan hewan peliharaan berbasis React + Tailwind CSS.
+Platform kesehatan hewan peliharaan lengkap dengan React + Tailwind CSS.
 
-## Fitur
-- Dashboard kesehatan real-time
-- Manajemen data hewan peliharaan
-- Notifikasi perawatan
-- Statistik kesehatan mingguan
+## Fitur Lengkap
+- 🔐 **Login** — autentikasi pengguna
+- 📊 **Dashboard** — statistik kesehatan & tips harian
+- 📅 **Jadwal** — kelola kegiatan hewan (makan, vaksin, olahraga, dsb)
+- 🏥 **Rekam Medis** — catatan kesehatan & kunjungan dokter
+- 💡 **Tips** — panduan perawatan per spesies
+- 🔔 **Notifikasi** — real-time dengan badge counter
+- ⚙️ **Pengaturan** — edit profil, kelola hewan, preferensi notifikasi, logout
+
+## Demo Login
+- Email: `demo@petcare.id`
+- Password: `petcare123`
 
 ## Tech Stack
-- React 18
-- Tailwind CSS 3
-- Lucide React Icons
+- React 18, Tailwind CSS 3, Lucide React Icons
+- Google Fonts: Plus Jakarta Sans
 
-## Cara Menjalankan Lokal
-
+## Cara Jalankan
 ```bash
 npm install
 npm start
 ```
 
-Buka [http://localhost:3000](http://localhost:3000) di browser.
-
 ## Deploy ke Vercel
-
-1. Push repo ini ke GitHub
-2. Buka [vercel.com](https://vercel.com) → Import project
-3. Klik Deploy — selesai! 🚀
+1. Push ke GitHub
+2. Import di vercel.com
+3. Deploy otomatis ✅
