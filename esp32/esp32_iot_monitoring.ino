@@ -30,10 +30,10 @@ const char* WIFI_SSID     = "NAMA_WIFI";
 const char* WIFI_PASSWORD = "PASSWORD_WIFI";
 
 // Supabase project URL (tanpa trailing slash)
-const char* SUPABASE_URL  = "https://YOUR_PROJECT_ID.supabase.co";
+const char* SUPABASE_URL  = "https://vpytcguxghpvvsrqdsoc.supabase.co";
 
 // Anon key dari Supabase → Settings > API > anon public
-const char* SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE";
+const char* SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweXRjZ3V4Z2hwdnZzcnFkc29jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTIzMTIsImV4cCI6MjA5MjY4ODMxMn0.-98m71uyb_Uf1x7VC1LM6Q6dPlja-FDuQQl0wXOqfTQ";
 
 // UUID pet dari Supabase → tabel pets → kolom id
 // Buka web PetCare+, Settings → lihat ID pet, copy-paste di sini
