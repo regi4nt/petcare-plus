@@ -52,3 +52,27 @@ body {
   letter-spacing: 0.1em;
   margin-bottom: 6px;
 }
+
+.auth-input {
+  width: 100%;
+  background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: white;
+  outline: none;
+  transition: all 0.2s;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.auth-input::placeholder { color: rgba(165,180,252,0.7); }
+.auth-input:focus { border-color: rgba(165,180,252,0.8); background: rgba(255,255,255,0.2); }
+.auth-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(165,180,252,0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
