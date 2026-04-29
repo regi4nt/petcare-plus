@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   HeartPulse, LayoutDashboard, Calendar, Activity, Settings, Bell,
   Plus, Thermometer, Clock, X, CheckCircle2, LogOut, User, Edit3,
-  Save, Cat, Dog, Rabbit, Bird, Trash2, ChevronRight, AlertCircle,
+  Save, Cat, Dog, Rabbit, Bird, Mouse, Squirrel, Trash2, ChevronRight, AlertCircle,
   ToggleLeft, ToggleRight, Phone, Mail, Lock, Eye, EyeOff, Check,
   FileText, Pill, Stethoscope, Syringe, Droplets,
   UtensilsCrossed, Dumbbell, LucideStar, Info, BookOpen, Loader2,
@@ -11,12 +11,25 @@ import {
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService } from './lib/api';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────
-const PET_ICONS = { Kucing: Cat, Anjing: Dog, Kelinci: Rabbit, Burung: Bird };
+const PET_ICONS = {
+  Kucing: Cat,
+  Anjing: Dog,
+  Kelinci: Rabbit,
+  Hamster: Mouse,
+  Marmut: Squirrel,
+  Ferret: Cat,
+  'Sugar Glider': Bird,
+  'Landak Mini': Squirrel,
+};
 const PET_COLORS = {
   Kucing: { bg: 'bg-orange-100', text: 'text-orange-600' },
   Anjing: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
   Kelinci: { bg: 'bg-pink-100', text: 'text-pink-600' },
-  Burung: { bg: 'bg-sky-100', text: 'text-sky-600' },
+  Hamster: { bg: 'bg-amber-100', text: 'text-amber-600' },
+  Marmut: { bg: 'bg-lime-100', text: 'text-lime-600' },
+  Ferret: { bg: 'bg-teal-100', text: 'text-teal-600' },
+  'Sugar Glider': { bg: 'bg-violet-100', text: 'text-violet-600' },
+  'Landak Mini': { bg: 'bg-slate-100', text: 'text-slate-600' },
 };
 
 const TIPS_DB = {
@@ -40,11 +53,40 @@ const TIPS_DB = {
     { title: 'Hindari Panas', body: 'Kelinci sangat sensitif terhadap panas. Jaga suhu ruangan di bawah 29 derajat C.', icon: Thermometer },
     { title: 'Sayur Segar', body: 'Berikan daun hijau segar seperti kangkung atau selada setiap hari sebagai suplemen.', icon: LucideStar },
   ],
-  Burung: [
-    { title: 'Cahaya Matahari', body: 'Jemur burung di pagi hari 30 menit untuk mendapatkan vitamin D alami.', icon: LucideStar },
-    { title: 'Kandang Bersih', body: 'Bersihkan kandang setiap 2 hari dan ganti alas kandang untuk mencegah bakteri.', icon: Info },
-    { title: 'Variasi Pakan', body: 'Berikan variasi biji-bijian, buah, dan sayuran untuk nutrisi burung yang seimbang.', icon: UtensilsCrossed },
-    { title: 'Stimulasi Mental', body: 'Sediakan mainan dan cermin di dalam kandang untuk menjaga kesehatan mental burung.', icon: BookOpen },
+  Hamster: [
+    { title: 'Roda Olahraga', body: 'Sediakan roda putar di kandang hamster untuk menjaga aktivitas fisiknya. Pilih roda solid agar kaki tidak terjepit.', icon: Dumbbell },
+    { title: 'Bedding Bersih', body: 'Ganti alas kandang (bedding) setiap 3-5 hari. Pilih material kayu cedar-free atau kertas daur ulang.', icon: Info },
+    { title: 'Makanan Segar', body: 'Berikan sayuran segar seperti wortel dan brokoli secukupnya. Hindari makanan manis berlebihan.', icon: UtensilsCrossed },
+    { title: 'Waktu Aktif', body: 'Hamster aktif di malam hari (nokturnal). Keluarkan dari kandang untuk bermain di malam hari saja.', icon: Clock },
+    { title: 'Suhu Nyaman', body: 'Jaga suhu ruangan 18-24°C. Hamster rentan hibernasi paksa jika suhu terlalu dingin.', icon: Thermometer },
+  ],
+  Marmut: [
+    { title: 'Vitamin C Harian', body: 'Marmut tidak bisa memproduksi vitamin C sendiri. Berikan paprika atau peterseli setiap hari.', icon: LucideStar },
+    { title: 'Jerami Tak Terbatas', body: 'Jerami timothy harus selalu tersedia sebagai makanan utama untuk menjaga gigi dan pencernaan marmut.', icon: UtensilsCrossed },
+    { title: 'Sosialisasi Aktif', body: 'Marmut hewan sosial. Idealnya dipelihara minimal dua ekor agar tidak stres dan kesepian.', icon: BookOpen },
+    { title: 'Kandang Luas', body: 'Sediakan kandang minimal 0,7 m² per ekor. Marmut butuh ruang berlari dan bersembunyi.', icon: Dumbbell },
+    { title: 'Periksa Gigi', body: 'Periksa panjang gigi marmut secara rutin. Gigi yang terlalu panjang bisa mengganggu nafsu makan.', icon: Stethoscope },
+  ],
+  Ferret: [
+    { title: 'Jam Bermain Wajib', body: 'Ferret butuh minimal 4 jam bermain di luar kandang setiap hari untuk mencegah kebosanan dan stres.', icon: Dumbbell },
+    { title: 'Protein Tinggi', body: 'Ferret karnivora obligat. Berikan makanan berbasis daging atau kibble khusus ferret dengan protein di atas 30%.', icon: UtensilsCrossed },
+    { title: 'Bau Tubuh', body: 'Ferret memiliki bau alami. Mandikan maksimal 2x per bulan agar minyak alami kulit tidak hilang berlebihan.', icon: Droplets },
+    { title: 'Vaksinasi Rutin', body: 'Ferret perlu vaksin distemper dan rabies setiap tahun. Konsultasikan jadwal vaksin ke dokter hewan.', icon: Syringe },
+    { title: 'Pengamanan Rumah', body: 'Ferret sangat ingin tahu dan bisa masuk ke celah kecil. Pastikan area bermain aman dari bahaya.', icon: Info },
+  ],
+  'Sugar Glider': [
+    { title: 'Diet BML/TPG', body: 'Ikuti diet khusus Sugar Glider seperti BML atau TPG untuk menjaga keseimbangan kalsium dan fosfor.', icon: UtensilsCrossed },
+    { title: 'Kantong Tidur', body: 'Sediakan bonding pouch atau kantong kain agar Sugar Glider merasa aman dan dekat dengan pemiliknya.', icon: LucideStar },
+    { title: 'Sosialisasi Sejak Dini', body: 'Habiskan waktu bonding minimal 2 jam setiap hari agar Sugar Glider jinak dan tidak mudah stres.', icon: BookOpen },
+    { title: 'Kandang Tinggi', body: 'Sugar Glider membutuhkan kandang vertikal (tinggi) karena senang memanjat. Minimum 60x60x90 cm.', icon: Dumbbell },
+    { title: 'Hindari Pestisida', body: 'Selalu cuci bersih buah dan sayuran sebelum diberikan. Sugar Glider sangat sensitif terhadap racun pestisida.', icon: AlertCircle },
+  ],
+  'Landak Mini': [
+    { title: 'Roda Lari Solid', body: 'Landak mini butuh roda lari setiap malam. Pilih roda solid tanpa jaring agar kaki tidak terluka.', icon: Dumbbell },
+    { title: 'Mandi Pasir', body: 'Bersihkan duri landak dengan sikat lembut saat mandi. Hindari memandikan terlalu sering agar tidak kering.', icon: Droplets },
+    { title: 'Suhu Hangat', body: 'Jaga suhu ruangan 24-29°C. Landak mini bisa mengalami hibernasi paksa di bawah 18°C yang berbahaya.', icon: Thermometer },
+    { title: 'Protein Serangga', body: 'Berikan jangkrik atau ulat sebagai camilan protein alami. Batasi 2-3 ekor per hari.', icon: UtensilsCrossed },
+    { title: 'Periksa Kaki', body: 'Cek kaki landak secara rutin. Benang atau serat karpet bisa melilit kaki dan menyebabkan cedera serius.', icon: Stethoscope },
   ],
 };
 
@@ -1307,6 +1349,26 @@ export default function App() {
 
   const handleLogout = async () => { await authService.signOut(); setActiveTab('dashboard'); };
 
+  const handlePanggilDokter = () => {
+    const query = encodeURIComponent('klinik hewan dokter hewan terdekat');
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          window.open(
+            `https://www.google.com/maps/search/${query}/@${latitude},${longitude},15z`,
+            '_blank'
+          );
+        },
+        () => {
+          window.open(`https://www.google.com/maps/search/${query}`, '_blank');
+        }
+      );
+    } else {
+      window.open(`https://www.google.com/maps/search/${query}`, '_blank');
+    }
+  };
+
   // Render loading screen
   if (loading) return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 to-slate-900 flex items-center justify-center">
@@ -1357,7 +1419,7 @@ export default function App() {
         <div className="mt-4 p-4 bg-slate-900 rounded-3xl text-white">
           <p className="text-[10px] text-slate-400 mb-1 font-bold uppercase tracking-widest">Darurat</p>
           <p className="text-xs font-bold mb-3">Butuh bantuan medis segera?</p>
-          <button className="w-full py-2.5 bg-rose-500 text-white rounded-xl text-xs font-bold hover:bg-rose-600 transition-colors flex items-center justify-center gap-2">
+          <button onClick={handlePanggilDokter} className="w-full py-2.5 bg-rose-500 text-white rounded-xl text-xs font-bold hover:bg-rose-600 transition-colors flex items-center justify-center gap-2">
             <Phone size={13} /> Panggil Dokter
           </button>
         </div>
