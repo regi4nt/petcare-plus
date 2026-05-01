@@ -432,30 +432,36 @@ const AuthPage = () => {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────
 const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records }) => {
-  const [iotLatest, setIotLatest]   = useState(null);
-  const [iotHistory, setIotHistory] = useState([]);
+  // Dashboard menggunakan data TERKALKULASI (rata-rata dari N pembacaan IoT),
+  // bukan data raw langsung. Data raw tersedia di halaman Monitor IoT.
+  const [iotCalc, setIotCalc]     = useState(null);
   const [iotLoading, setIotLoading] = useState(false);
+
+  const fetchCalculated = async (petId) => {
+    if (!petId) return;
+    setIotLoading(true);
+    try {
+      const calc = await monitoringService.getCalculated(petId, 20);
+      setIotCalc(calc);
+    } catch (e) {
+      console.error('Dashboard calc error', e);
+    } finally {
+      setIotLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedPet?.id) return;
-    setIotLoading(true);
-    Promise.all([
-      monitoringService.getOne(selectedPet.id),
-      monitoringService.getLatest(selectedPet.id, 7),
-    ]).then(([one, hist]) => {
-      setIotLatest(one);
-      setIotHistory((hist || []).slice().reverse());
-    }).catch(console.error)
-      .finally(() => setIotLoading(false));
+    fetchCalculated(selectedPet.id);
 
-    const channel = monitoringService.subscribe(selectedPet.id, (newRow) => {
-      setIotLatest(newRow);
-      setIotHistory(prev => [...prev, newRow].slice(-7));
+    // Saat ada data IoT baru masuk (realtime), re-kalkulasi data dashboard
+    const channel = monitoringService.subscribe(selectedPet.id, () => {
+      fetchCalculated(selectedPet.id);
     });
     return () => { channel.unsubscribe(); };
   }, [selectedPet?.id]);
 
-  // ── Status helpers (sama dengan MonitorPage) ──────────────────────
+  // ── Status helpers ────────────────────────────────────────────────
   const getSuhuStatus = (s) => {
     if (s == null) return { label: '—', cls: 'text-slate-400' };
     if (s < 37.5) return { label: 'Rendah', cls: 'text-blue-600' };
@@ -474,13 +480,14 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     return { label: 'Normal', cls: 'text-emerald-600' };
   };
 
-  const suhuSt = getSuhuStatus(iotLatest?.suhu);
-  const hrSt   = getHRStatus(iotLatest?.heart_rate);
-  const spo2St = getSpO2Status(iotLatest?.spo2);
+  // Gunakan nilai kalkulasi (rata-rata), bukan nilai raw langsung
+  const suhuSt = getSuhuStatus(iotCalc?.avg_suhu);
+  const hrSt   = getHRStatus(iotCalc?.avg_heart_rate);
+  const spo2St = getSpO2Status(iotCalc?.avg_spo2);
 
-  // ── Kesimpulan kondisi keseluruhan ────────────────────────────────
+  // ── Kesimpulan kondisi keseluruhan (dari data kalkulasi) ──────────
   const getOverallStatus = () => {
-    if (!iotLatest) return { label: 'Belum ada data IoT', cls: 'bg-slate-100 text-slate-500' };
+    if (!iotCalc) return { label: 'Belum ada data IoT', cls: 'bg-slate-100 text-slate-500' };
     const abnormal = [suhuSt, hrSt, spo2St].filter(s => s.label === 'Tinggi' || s.label === 'Rendah').length;
     if (abnormal === 0) return { label: 'Kondisi Sehat ✓', cls: 'bg-emerald-100 text-emerald-700' };
     if (abnormal === 1) return { label: 'Perlu Perhatian', cls: 'bg-amber-100 text-amber-700' };
@@ -488,12 +495,12 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   };
   const overall = getOverallStatus();
 
-  // ── Stats dari data IoT nyata ─────────────────────────────────────
+  // ── Stats dari data kalkulasi IoT (rata-rata N pembacaan terakhir) ─
   const fmt = (v, digits = 1) => v != null ? parseFloat(v).toFixed(digits) : null;
   const stats = [
     {
       label: 'Detak Jantung',
-      value: fmt(iotLatest?.heart_rate, 0),
+      value: fmt(iotCalc?.avg_heart_rate, 0),
       unit: 'bpm',
       status: hrSt.label,
       statusCls: hrSt.cls,
@@ -503,7 +510,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     },
     {
       label: 'Suhu Tubuh',
-      value: fmt(iotLatest?.suhu),
+      value: fmt(iotCalc?.avg_suhu),
       unit: '°C',
       status: suhuSt.label,
       statusCls: suhuSt.cls,
@@ -513,7 +520,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     },
     {
       label: 'Saturasi O₂',
-      value: fmt(iotLatest?.spo2),
+      value: fmt(iotCalc?.avg_spo2),
       unit: '%',
       status: spo2St.label,
       statusCls: spo2St.cls,
@@ -523,29 +530,29 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     },
     {
       label: 'Mode Sensor',
-      value: iotLatest?.mode ? (iotLatest.mode === 'kandang' ? 'Kandang' : 'Kalung') : null,
+      value: iotCalc?.latest_mode ? (iotCalc.latest_mode === 'kandang' ? 'Kandang' : 'Kalung') : null,
       unit: '',
-      status: iotLatest ? (iotLatest.mode === 'kandang' ? 'Di Rumah' : 'Bebas') : '—',
-      statusCls: iotLatest?.mode === 'kandang' ? 'text-amber-600' : 'text-indigo-600',
-      icon: iotLatest?.mode === 'kandang' ? Home : Tag,
-      color: iotLatest?.mode === 'kandang' ? 'text-amber-500' : 'text-indigo-500',
-      bg: iotLatest?.mode === 'kandang' ? 'bg-amber-50' : 'bg-indigo-50',
+      status: iotCalc ? (iotCalc.latest_mode === 'kandang' ? 'Di Rumah' : 'Bebas') : '—',
+      statusCls: iotCalc?.latest_mode === 'kandang' ? 'text-amber-600' : 'text-indigo-600',
+      icon: iotCalc?.latest_mode === 'kandang' ? Home : Tag,
+      color: iotCalc?.latest_mode === 'kandang' ? 'text-amber-500' : 'text-indigo-500',
+      bg: iotCalc?.latest_mode === 'kandang' ? 'bg-amber-50' : 'bg-indigo-50',
     },
   ];
 
   // ── Bar chart dari history akselerasi IoT (proxy aktivitas) ───────
   const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
   const todayIdx = (new Date().getDay() + 6) % 7;
-  // Gunakan data IoT history (ax) sebagai indikator aktivitas; fallback ke placeholder
-  const bars = iotHistory.length >= 2
+  const axHistory = iotCalc?.ax_history || [];
+  const bars = axHistory.length >= 2
     ? (() => {
-        const axVals = iotHistory.map(d => Math.abs(parseFloat(d.ax) || 0));
+        const axVals = axHistory.map(v => Math.abs(parseFloat(v) || 0));
         const maxAx = Math.max(...axVals) || 1;
         return axVals.map(v => Math.round((v / maxAx) * 100));
       })()
     : [50, 80, 45, 95, 60, 75, 85];
-  const barLabels = iotHistory.length >= 2
-    ? iotHistory.map((d, i) => `#${i + 1}`)
+  const barLabels = axHistory.length >= 2
+    ? axHistory.map((_, i) => `#${i + 1}`)
     : days;
 
   if (!selectedPet) return (
@@ -597,9 +604,9 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
               <Activity size={14} />
               <span className="text-xs font-bold">{overall.label}</span>
             </div>
-            {iotLatest && (
+            {iotCalc && (
               <span className="text-[10px] font-semibold opacity-70">
-                Data IoT · {new Date(iotLatest.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                Rata-rata {iotCalc.reading_count} pembacaan IoT
               </span>
             )}
           </div>
@@ -626,22 +633,22 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h4 className="font-bold text-slate-800">
-                  {iotHistory.length >= 2 ? 'Tren Akselerasi IoT' : 'Tren Aktivitas'}
+                  {axHistory.length >= 2 ? 'Tren Aktivitas (Kalkulasi IoT)' : 'Tren Aktivitas'}
                 </h4>
                 <p className="text-xs text-slate-400">
-                  {iotHistory.length >= 2 ? `${iotHistory.length} rekaman terakhir · ${selectedPet.name}` : `Kondisi fisik ${selectedPet.name}`}
+                  {axHistory.length >= 2 ? `${axHistory.length} rekaman · rata-rata akselerasi ${selectedPet.name}` : `Kondisi fisik ${selectedPet.name}`}
                 </p>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
                 <span className="text-[10px] font-bold text-slate-500 uppercase">
-                  {iotHistory.length >= 2 ? 'IoT Live' : 'Aktivitas'}
+                  {axHistory.length >= 2 ? 'Kalkulasi' : 'Aktivitas'}
                 </span>
               </div>
             </div>
             <div className="flex items-end justify-between gap-3" style={{ height: 192 }}>
               {bars.map((h, i) => {
-                const isHighlight = iotHistory.length >= 2 ? i === bars.length - 1 : i === todayIdx;
+                const isHighlight = axHistory.length >= 2 ? i === bars.length - 1 : i === todayIdx;
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-2 group" style={{ height: '100%' }}>
                     <div className="w-full bg-slate-50 rounded-2xl overflow-hidden flex flex-col justify-end" style={{ height: 'calc(100% - 20px)' }}>

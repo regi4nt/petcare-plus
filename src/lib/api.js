@@ -285,6 +285,43 @@ export const monitoringService = {
   },
 
   /**
+   * Ambil data terkalkulasi (rata-rata) dari N pembacaan terakhir.
+   * Digunakan oleh Dashboard — bukan data raw langsung dari IoT.
+   * @param {string} petId - UUID pet
+   * @param {number} limit - jumlah pembacaan yang dikalkulasi (default: 20)
+   * @returns {{ avg_suhu, avg_heart_rate, avg_spo2, latest_mode, reading_count, last_reading_at, ax_history } | null}
+   */
+  async getCalculated(petId, limit = 20) {
+    const { data, error } = await supabase
+      .from('monitoring')
+      .select('suhu, heart_rate, spo2, ax, ay, az, mode, created_at')
+      .eq('pet_id', petId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+
+    const avg = (field) => {
+      const vals = data.map(d => parseFloat(d[field])).filter(v => !isNaN(v));
+      if (!vals.length) return null;
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    };
+
+    // Kembalikan ax_history dalam urutan ascending (lama → baru) untuk bar chart
+    const axHistory = data.slice().reverse().map(d => d.ax);
+
+    return {
+      avg_suhu: avg('suhu'),
+      avg_heart_rate: avg('heart_rate'),
+      avg_spo2: avg('spo2'),
+      latest_mode: data[0]?.mode,
+      reading_count: data.length,
+      last_reading_at: data[0]?.created_at,
+      ax_history: axHistory,
+    };
+  },
+
+  /**
    * Hapus semua data monitoring untuk pet tertentu.
    * @param {string} petId
    */
