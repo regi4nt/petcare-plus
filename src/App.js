@@ -120,6 +120,175 @@ const timeAgo = (ts) => {
 
 const isToday = (str) => str === todayStr;
 
+// ─── PUSH NOTIFICATION HOOK ───────────────────────────────────────────
+// Minta izin notifikasi device dan kirim push saat jadwal hampir tiba
+const usePushNotifications = (schedules, pets) => {
+  const sentRef = useRef(new Set());
+
+  useEffect(() => {
+    // Minta izin push notification saat pertama kali
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!schedules?.length) return;
+
+    const checkAndNotify = () => {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      const now = new Date();
+      const todayDate = now.toISOString().split('T')[0];
+
+      schedules.forEach(s => {
+        if (s.done) return;
+        if (s.date !== todayDate) return;
+
+        const [hour, minute] = s.time.split(':').map(Number);
+        const scheduleTime = new Date();
+        scheduleTime.setHours(hour, minute, 0, 0);
+
+        const diffMs = scheduleTime - now;
+        const diffMin = diffMs / 60000;
+
+        // Notifikasi 15 menit sebelum jadwal
+        const key15 = `15min-${s.id}`;
+        if (diffMin > 0 && diffMin <= 15 && !sentRef.current.has(key15)) {
+          sentRef.current.add(key15);
+          const pet = pets?.find(p => p.id === s.pet_id);
+          const n = new Notification(`⏰ Jadwal Segera: ${s.title}`, {
+            body: `${pet?.name || 'Hewan'} punya jadwal ${s.type} dalam 15 menit (${s.time})`,
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            tag: key15,
+          });
+          n.onclick = () => { window.focus(); n.close(); };
+        }
+
+        // Notifikasi tepat waktu
+        const keyNow = `now-${s.id}`;
+        if (diffMin >= -2 && diffMin <= 2 && !sentRef.current.has(keyNow)) {
+          sentRef.current.add(keyNow);
+          const pet = pets?.find(p => p.id === s.pet_id);
+          const n = new Notification(`🔔 Waktunya: ${s.title}`, {
+            body: `Jadwal ${s.type} untuk ${pet?.name || 'hewan'} sudah tiba!`,
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            tag: keyNow,
+          });
+          n.onclick = () => { window.focus(); n.close(); };
+        }
+      });
+    };
+
+    checkAndNotify();
+    const interval = setInterval(checkAndNotify, 60 * 1000); // cek tiap menit
+    return () => clearInterval(interval);
+  }, [schedules, pets]);
+};
+
+// ─── SMART TIPS GENERATOR ─────────────────────────────────────────────
+// Tips dinamis berdasarkan riwayat rekam medis pet
+const getSmartTips = (pet, records) => {
+  if (!pet) return null;
+
+  const petRecords = (records || []).filter(r => r.pet_id === pet.id);
+  const speciesTips = TIPS_DB[pet.species] || TIPS_DB['Kucing'];
+  const smartTips = [];
+
+  if (petRecords.length === 0) {
+    // Belum ada rekam medis — tampilkan tips default
+    return speciesTips.slice(0, 2);
+  }
+
+  // Cek apakah ada kunjungan berikutnya yang terlewat atau mendekati
+  const today = new Date().toISOString().split('T')[0];
+  const overdueVisits = petRecords.filter(r => r.next_visit && r.next_visit < today);
+  const upcomingVisits = petRecords.filter(r => {
+    if (!r.next_visit || r.next_visit < today) return false;
+    const daysLeft = Math.ceil((new Date(r.next_visit) - new Date()) / (1000 * 86400));
+    return daysLeft <= 14;
+  });
+
+  if (overdueVisits.length > 0) {
+    const latest = overdueVisits[0];
+    smartTips.push({
+      title: '⚠️ Kunjungan Dokter Terlewat',
+      body: `Kunjungan berikutnya setelah "${latest.title}" sudah terlewat sejak ${new Date(latest.next_visit).toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}. Segera jadwalkan ulang!`,
+      icon: AlertCircle,
+      priority: 'urgent',
+    });
+  }
+
+  if (upcomingVisits.length > 0) {
+    const v = upcomingVisits[0];
+    const daysLeft = Math.ceil((new Date(v.next_visit) - new Date()) / (1000 * 86400));
+    smartTips.push({
+      title: `📅 Kunjungan Segera (${daysLeft} hari)`,
+      body: `Follow-up dari "${v.title}" dijadwalkan pada ${new Date(v.next_visit).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}. Siapkan catatan kondisi terbaru.`,
+      icon: Stethoscope,
+      priority: 'high',
+    });
+  }
+
+  // Cek riwayat vaksinasi — jika terakhir vaksin > 11 bulan lalu
+  const vaksinRecords = petRecords.filter(r => r.type === 'Vaksinasi').sort((a, b) => b.date.localeCompare(a.date));
+  if (vaksinRecords.length > 0) {
+    const lastVaksin = vaksinRecords[0];
+    const monthsSince = Math.floor((new Date() - new Date(lastVaksin.date)) / (1000 * 86400 * 30));
+    if (monthsSince >= 11) {
+      smartTips.push({
+        title: `💉 Vaksinasi Perlu Diperbarui`,
+        body: `Vaksinasi terakhir "${lastVaksin.title}" sudah ${monthsSince} bulan lalu. Konsultasikan ke dokter hewan untuk jadwal booster.`,
+        icon: Syringe,
+        priority: 'high',
+      });
+    }
+  }
+
+  // Cek berat badan — jika ada perubahan berat signifikan
+  const weightRecords = petRecords.filter(r => r.weight).sort((a, b) => a.date.localeCompare(b.date));
+  if (weightRecords.length >= 2) {
+    const oldest = parseFloat(weightRecords[0].weight);
+    const latest = parseFloat(weightRecords[weightRecords.length - 1].weight);
+    const change = ((latest - oldest) / oldest) * 100;
+    if (Math.abs(change) >= 10) {
+      smartTips.push({
+        title: change > 0 ? '📈 Berat Badan Meningkat' : '📉 Berat Badan Menurun',
+        body: `Berat ${pet.name} berubah ${Math.abs(change).toFixed(0)}% dari ${oldest}kg ke ${latest}kg. ${change > 0 ? 'Perhatikan pola makan dan aktivitas.' : 'Pantau nafsu makan dan kondisi kesehatan.'}`,
+        icon: Activity,
+        priority: 'medium',
+      });
+    }
+  }
+
+  // Cek apakah ada pengobatan/operasi baru-baru ini (< 30 hari)
+  const recentTreatment = petRecords.filter(r =>
+    (r.type === 'Pengobatan' || r.type === 'Operasi') &&
+    Math.ceil((new Date() - new Date(r.date)) / (1000 * 86400)) <= 30
+  );
+  if (recentTreatment.length > 0) {
+    const t = recentTreatment[0];
+    smartTips.push({
+      title: '🏥 Pemulihan Pasca Perawatan',
+      body: `${pet.name} baru menjalani "${t.title}" ${Math.ceil((new Date() - new Date(t.date)) / (1000 * 86400))} hari lalu. Pantau kondisi, beri makanan bergizi, dan istirahat yang cukup.`,
+      icon: HeartPulse,
+      priority: 'medium',
+    });
+  }
+
+  // Tambahkan tips spesies sebagai fallback jika kurang dari 2 smart tips
+  const allSpeciesTips = speciesTips.filter((_, i) => !smartTips.find(st => st.title === speciesTips[i]?.title));
+  const needed = Math.max(0, 2 - smartTips.length);
+  const todayIdx = new Date().getDate();
+  for (let i = 0; i < needed && i < allSpeciesTips.length; i++) {
+    smartTips.push(allSpeciesTips[(todayIdx + i) % allSpeciesTips.length]);
+  }
+
+  return smartTips.slice(0, 3);
+};
+
 // ─── SMALL COMPONENTS ─────────────────────────────────────────────────
 const PetAvatar = ({ species, size = 'md', className = '' }) => {
   const Icon = PET_ICONS[species] || Cat;
@@ -262,7 +431,123 @@ const AuthPage = () => {
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────
-const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications }) => {
+const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records }) => {
+  const [iotLatest, setIotLatest]   = useState(null);
+  const [iotHistory, setIotHistory] = useState([]);
+  const [iotLoading, setIotLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedPet?.id) return;
+    setIotLoading(true);
+    Promise.all([
+      monitoringService.getOne(selectedPet.id),
+      monitoringService.getLatest(selectedPet.id, 7),
+    ]).then(([one, hist]) => {
+      setIotLatest(one);
+      setIotHistory((hist || []).slice().reverse());
+    }).catch(console.error)
+      .finally(() => setIotLoading(false));
+
+    const channel = monitoringService.subscribe(selectedPet.id, (newRow) => {
+      setIotLatest(newRow);
+      setIotHistory(prev => [...prev, newRow].slice(-7));
+    });
+    return () => { channel.unsubscribe(); };
+  }, [selectedPet?.id]);
+
+  // ── Status helpers (sama dengan MonitorPage) ──────────────────────
+  const getSuhuStatus = (s) => {
+    if (s == null) return { label: '—', cls: 'text-slate-400' };
+    if (s < 37.5) return { label: 'Rendah', cls: 'text-blue-600' };
+    if (s > 39.5) return { label: 'Tinggi', cls: 'text-rose-600' };
+    return { label: 'Normal', cls: 'text-emerald-600' };
+  };
+  const getHRStatus = (h) => {
+    if (h == null) return { label: '—', cls: 'text-slate-400' };
+    if (h < 60)  return { label: 'Rendah', cls: 'text-blue-600' };
+    if (h > 140) return { label: 'Tinggi', cls: 'text-rose-600' };
+    return { label: 'Normal', cls: 'text-emerald-600' };
+  };
+  const getSpO2Status = (s) => {
+    if (s == null) return { label: '—', cls: 'text-slate-400' };
+    if (s < 95) return { label: 'Rendah', cls: 'text-rose-600' };
+    return { label: 'Normal', cls: 'text-emerald-600' };
+  };
+
+  const suhuSt = getSuhuStatus(iotLatest?.suhu);
+  const hrSt   = getHRStatus(iotLatest?.heart_rate);
+  const spo2St = getSpO2Status(iotLatest?.spo2);
+
+  // ── Kesimpulan kondisi keseluruhan ────────────────────────────────
+  const getOverallStatus = () => {
+    if (!iotLatest) return { label: 'Belum ada data IoT', cls: 'bg-slate-100 text-slate-500' };
+    const abnormal = [suhuSt, hrSt, spo2St].filter(s => s.label === 'Tinggi' || s.label === 'Rendah').length;
+    if (abnormal === 0) return { label: 'Kondisi Sehat ✓', cls: 'bg-emerald-100 text-emerald-700' };
+    if (abnormal === 1) return { label: 'Perlu Perhatian', cls: 'bg-amber-100 text-amber-700' };
+    return { label: 'Butuh Pemeriksaan', cls: 'bg-rose-100 text-rose-700' };
+  };
+  const overall = getOverallStatus();
+
+  // ── Stats dari data IoT nyata ─────────────────────────────────────
+  const fmt = (v, digits = 1) => v != null ? parseFloat(v).toFixed(digits) : null;
+  const stats = [
+    {
+      label: 'Detak Jantung',
+      value: fmt(iotLatest?.heart_rate, 0),
+      unit: 'bpm',
+      status: hrSt.label,
+      statusCls: hrSt.cls,
+      icon: HeartPulse,
+      color: 'text-rose-500',
+      bg: 'bg-rose-50',
+    },
+    {
+      label: 'Suhu Tubuh',
+      value: fmt(iotLatest?.suhu),
+      unit: '°C',
+      status: suhuSt.label,
+      statusCls: suhuSt.cls,
+      icon: Thermometer,
+      color: 'text-amber-500',
+      bg: 'bg-amber-50',
+    },
+    {
+      label: 'Saturasi O₂',
+      value: fmt(iotLatest?.spo2),
+      unit: '%',
+      status: spo2St.label,
+      statusCls: spo2St.cls,
+      icon: Activity,
+      color: 'text-sky-500',
+      bg: 'bg-sky-50',
+    },
+    {
+      label: 'Mode Sensor',
+      value: iotLatest?.mode ? (iotLatest.mode === 'kandang' ? 'Kandang' : 'Kalung') : null,
+      unit: '',
+      status: iotLatest ? (iotLatest.mode === 'kandang' ? 'Di Rumah' : 'Bebas') : '—',
+      statusCls: iotLatest?.mode === 'kandang' ? 'text-amber-600' : 'text-indigo-600',
+      icon: iotLatest?.mode === 'kandang' ? Home : Tag,
+      color: iotLatest?.mode === 'kandang' ? 'text-amber-500' : 'text-indigo-500',
+      bg: iotLatest?.mode === 'kandang' ? 'bg-amber-50' : 'bg-indigo-50',
+    },
+  ];
+
+  // ── Bar chart dari history akselerasi IoT (proxy aktivitas) ───────
+  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+  const todayIdx = (new Date().getDay() + 6) % 7;
+  // Gunakan data IoT history (ax) sebagai indikator aktivitas; fallback ke placeholder
+  const bars = iotHistory.length >= 2
+    ? (() => {
+        const axVals = iotHistory.map(d => Math.abs(parseFloat(d.ax) || 0));
+        const maxAx = Math.max(...axVals) || 1;
+        return axVals.map(v => Math.round((v / maxAx) * 100));
+      })()
+    : [50, 80, 45, 95, 60, 75, 85];
+  const barLabels = iotHistory.length >= 2
+    ? iotHistory.map((d, i) => `#${i + 1}`)
+    : days;
+
   if (!selectedPet) return (
     <div className="text-center py-20 text-slate-400">
       <Cat size={48} className="mx-auto mb-4 opacity-30" />
@@ -274,18 +559,8 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications 
     </div>
   );
 
-  const code = selectedPet.id ? selectedPet.id.charCodeAt(0) : 65;
-  const stats = [
-    { label: 'Detak Jantung', value: `${100 + code % 20} bpm`, status: 'Normal', icon: HeartPulse, color: 'text-rose-500', bg: 'bg-rose-50' },
-    { label: 'Suhu Tubuh', value: `${(38 + (code % 10) / 10).toFixed(1)}C`, status: 'Normal', icon: Thermometer, color: 'text-amber-500', bg: 'bg-amber-50' },
-    { label: 'Aktivitas', value: `${70 + code % 25}%`, status: 'Aktif', icon: Activity, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'Istirahat', value: `${10 + code % 5} Jam`, status: 'Cukup', icon: Clock, color: 'text-blue-500', bg: 'bg-blue-50' },
-  ];
-  const bars = [50, 80, 45, 95, 60, 75, 85];
-  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-  const todayIdx = (new Date().getDay() + 6) % 7;
-  const tips = TIPS_DB[selectedPet.species] || TIPS_DB['Kucing'];
-  const tip = tips[new Date().getDate() % tips.length];
+  const smartTips = getSmartTips(selectedPet, records);
+  const tip = smartTips?.[0] || (TIPS_DB[selectedPet.species] || TIPS_DB['Kucing'])[0];
   const TipIcon = tip.icon;
 
   return (
@@ -316,13 +591,33 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications 
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {/* Banner kesimpulan kondisi IoT */}
+          <div className={`flex items-center justify-between px-5 py-3 rounded-2xl ${overall.cls}`}>
+            <div className="flex items-center gap-2">
+              <Activity size={14} />
+              <span className="text-xs font-bold">{overall.label}</span>
+            </div>
+            {iotLatest && (
+              <span className="text-[10px] font-semibold opacity-70">
+                Data IoT · {new Date(iotLatest.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {stats.map((st, i) => (
               <div key={i} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
                 <div className={`${st.bg} ${st.color} w-10 h-10 rounded-2xl flex items-center justify-center mb-3`}><st.icon size={20} /></div>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
-                <p className="text-xl font-black mt-1">{st.value}</p>
-                <span className="text-[10px] text-emerald-600 font-bold mt-1 block">{st.status}</span>
+                <p className="text-xl font-black mt-1">
+                  {iotLoading
+                    ? <span className="text-slate-300 text-base">...</span>
+                    : st.value != null
+                      ? <>{st.value}<span className="text-xs font-semibold text-slate-400 ml-0.5">{st.unit}</span></>
+                      : <span className="text-slate-300">--</span>
+                  }
+                </p>
+                <span className={`text-[10px] font-bold mt-1 block ${st.statusCls}`}>{st.status}</span>
               </div>
             ))}
           </div>
@@ -330,38 +625,63 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications 
           <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h4 className="font-bold text-slate-800">Tren Aktivitas Mingguan</h4>
-                <p className="text-xs text-slate-400">Kondisi fisik {selectedPet.name}</p>
+                <h4 className="font-bold text-slate-800">
+                  {iotHistory.length >= 2 ? 'Tren Akselerasi IoT' : 'Tren Aktivitas'}
+                </h4>
+                <p className="text-xs text-slate-400">
+                  {iotHistory.length >= 2 ? `${iotHistory.length} rekaman terakhir · ${selectedPet.name}` : `Kondisi fisik ${selectedPet.name}`}
+                </p>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Aktivitas</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">
+                  {iotHistory.length >= 2 ? 'IoT Live' : 'Aktivitas'}
+                </span>
               </div>
             </div>
             <div className="flex items-end justify-between gap-3" style={{ height: 192 }}>
-              {bars.map((h, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2 group" style={{ height: '100%' }}>
-                  <div className="w-full bg-slate-50 rounded-2xl overflow-hidden flex flex-col justify-end" style={{ height: 'calc(100% - 20px)' }}>
-                    <div className={`w-full rounded-2xl bar-fill ${i === todayIdx ? 'bg-indigo-600' : 'bg-indigo-100 group-hover:bg-indigo-200'}`} style={{ height: `${h}%` }} />
+              {bars.map((h, i) => {
+                const isHighlight = iotHistory.length >= 2 ? i === bars.length - 1 : i === todayIdx;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group" style={{ height: '100%' }}>
+                    <div className="w-full bg-slate-50 rounded-2xl overflow-hidden flex flex-col justify-end" style={{ height: 'calc(100% - 20px)' }}>
+                      <div className={`w-full rounded-2xl bar-fill ${isHighlight ? 'bg-indigo-600' : 'bg-indigo-100 group-hover:bg-indigo-200'}`} style={{ height: `${h}%` }} />
+                    </div>
+                    <span className={`text-[10px] font-bold ${isHighlight ? 'text-indigo-600' : 'text-slate-400'}`}>{barLabels[i]}</span>
                   </div>
-                  <span className={`text-[10px] font-bold ${i === todayIdx ? 'text-indigo-600' : 'text-slate-400'}`}>{days[i]}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
 
         <div className="space-y-5">
-          <div className="bg-indigo-600 p-6 rounded-[32px] text-white shadow-xl shadow-indigo-200 relative overflow-hidden">
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-3">
-                <TipIcon size={15} className="text-indigo-200" />
-                <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest">Tips Hari Ini</span>
-              </div>
-              <h4 className="font-black text-base mb-2">{tip.title}</h4>
-              <p className="text-xs text-indigo-100 leading-relaxed opacity-90">{tip.body}</p>
-            </div>
-            <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+          <div className="space-y-3">
+            {(smartTips || [tip]).map((t, idx) => {
+              const TIcon = t.icon;
+              const isUrgent = t.priority === 'urgent';
+              const isHigh = t.priority === 'high';
+              const cardCls = isUrgent
+                ? 'bg-rose-600 shadow-rose-200'
+                : isHigh
+                ? 'bg-amber-500 shadow-amber-200'
+                : 'bg-indigo-600 shadow-indigo-200';
+              return (
+                <div key={idx} className={`${cardCls} p-5 rounded-[28px] text-white shadow-xl relative overflow-hidden`}>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TIcon size={14} className="opacity-80" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                        {isUrgent ? 'Segera Tindak' : isHigh ? 'Perhatian' : 'Tips Hari Ini'}
+                      </span>
+                    </div>
+                    <h4 className="font-black text-sm mb-1 leading-snug">{t.title}</h4>
+                    <p className="text-[11px] opacity-90 leading-relaxed">{t.body}</p>
+                  </div>
+                  <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+                </div>
+              );
+            })}
           </div>
 
           <div className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm">
@@ -654,10 +974,16 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
 };
 
 // ─── TIPS PAGE ────────────────────────────────────────────────────────
-const TipsPage = ({ selectedPet }) => {
+const TipsPage = ({ selectedPet, records }) => {
   const [activeSpecies, setActiveSpecies] = useState(selectedPet?.species || 'Kucing');
   const tips = TIPS_DB[activeSpecies] || TIPS_DB['Kucing'];
   const gradients = ['from-indigo-500 to-violet-600', 'from-emerald-500 to-teal-600', 'from-amber-500 to-orange-600', 'from-rose-500 to-pink-600', 'from-sky-500 to-blue-600'];
+
+  // Smart tips berdasarkan rekam medis pet yang sedang aktif
+  const activePet = selectedPet?.species === activeSpecies ? selectedPet : null;
+  const smartTips = activePet ? getSmartTips(activePet, records) : null;
+  const hasPersonalized = smartTips && smartTips.some(t => t.priority);
+
   return (
     <div className="anim-slide-up">
       <h3 className="text-xl font-black text-slate-800 mb-2">Tips Perawatan</h3>
@@ -673,6 +999,37 @@ const TipsPage = ({ selectedPet }) => {
           );
         })}
       </div>
+
+      {/* Personalized tips dari rekam medis */}
+      {hasPersonalized && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Stethoscope size={15} className="text-indigo-600" />
+            <span className="text-sm font-black text-slate-800">Rekomendasi untuk {activePet?.name}</span>
+            <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">Berdasarkan Rekam Medis</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {smartTips.filter(t => t.priority).map((tip, i) => {
+              const Icon = tip.icon;
+              const isUrgent = tip.priority === 'urgent';
+              const cardCls = isUrgent
+                ? 'from-rose-500 to-rose-700'
+                : tip.priority === 'high'
+                ? 'from-amber-500 to-orange-600'
+                : 'from-indigo-500 to-violet-600';
+              return (
+                <div key={i} className={`bg-gradient-to-br ${cardCls} p-6 rounded-[24px] text-white shadow-lg`}>
+                  <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center mb-3"><Icon size={18} /></div>
+                  <h4 className="font-black text-base mb-1">{tip.title}</h4>
+                  <p className="text-xs opacity-90 leading-relaxed">{tip.body}</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="h-px bg-slate-100 my-6" />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {tips.map((tip, i) => {
           const Icon = tip.icon;
@@ -1209,6 +1566,9 @@ export default function App() {
   const [petLoading, setPetLoading] = useState(false);
   const notifRef = useRef(null);
 
+  // Push notification ke device untuk pengingat jadwal
+  usePushNotifications(schedules, pets);
+
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
@@ -1452,13 +1812,28 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {/* Banner izin notifikasi device */}
+          {'Notification' in window && Notification.permission === 'default' && (
+            <div className="max-w-6xl mx-auto mb-4 bg-indigo-50 border border-indigo-200 rounded-2xl px-5 py-3 flex items-center gap-3">
+              <Bell size={16} className="text-indigo-600 shrink-0" />
+              <p className="text-xs text-indigo-800 font-semibold flex-1">
+                Aktifkan notifikasi perangkat agar dapat pengingat jadwal langsung di device kamu
+              </p>
+              <button
+                onClick={() => Notification.requestPermission()}
+                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shrink-0"
+              >
+                Aktifkan
+              </button>
+            </div>
+          )}
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} />}
+              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} />}
-              {activeTab === 'tips' && <TipsPage selectedPet={selectedPet} />}
+              {activeTab === 'tips' && <TipsPage selectedPet={selectedPet} records={records} />}
               {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} />}
             </div>
           )}
