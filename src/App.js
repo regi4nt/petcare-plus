@@ -3043,16 +3043,6 @@ export default function App() {
     }
   };
 
-  // Render loading screen
-  if (loading) return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-950 to-slate-900 flex flex-col items-center justify-center px-8 gap-0">
-      <img src="/logo.svg" alt="PetCare+" className="w-24 h-24 rounded-3xl shadow-2xl shadow-indigo-900/80 mb-7" />
-      <p className="text-white text-3xl font-black tracking-tight mb-1">PetCare<span className="text-indigo-400">+</span></p>
-      <p className="text-indigo-300/80 text-sm font-medium mb-10">Pemantauan Kesehatan Hewan Pintar</p>
-      <Loader2 size={22} className="animate-spin text-indigo-400/60" />
-    </div>
-  );
-
   // Render auth page if not logged in
   if (!session) return <AuthPage />;
 
