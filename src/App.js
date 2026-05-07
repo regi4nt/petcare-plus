@@ -3024,12 +3024,22 @@ export default function App() {
 
   // Render loading screen
   if (loading) return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 to-slate-900 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-20 h-20 bg-indigo-500 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-2xl">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex flex-col items-center justify-center px-6">
+      <div className="flex flex-col items-center gap-5 w-full max-w-xs">
+        {/* Logo */}
+        <div className="w-20 h-20 bg-indigo-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-900/60 ring-4 ring-indigo-400/20">
           <HeartPulse size={40} className="text-white" />
         </div>
-        <Loader2 size={28} className="animate-spin mx-auto mt-4 text-indigo-300" />
+        {/* App name */}
+        <div className="text-center">
+          <p className="text-white text-2xl font-black tracking-tight">PetCare<span className="text-indigo-400">+</span></p>
+          <p className="text-indigo-300 text-xs font-semibold mt-1">Pemantauan Kesehatan Hewan Pintar</p>
+        </div>
+        {/* Spinner + loading text */}
+        <div className="flex flex-col items-center gap-3 mt-2">
+          <Loader2 size={26} className="animate-spin text-indigo-400" />
+          <p className="text-indigo-400/70 text-xs font-semibold">Memuat aplikasi...</p>
+        </div>
       </div>
     </div>
   );
@@ -3048,12 +3058,10 @@ export default function App() {
   const unreadCount = notifications.filter(n => n.unread).length;
   const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
-  // Launch animation: only once per session (not on every reload)
-  const isFirstLaunch = !sessionStorage.getItem('petcare_launched');
-  if (isFirstLaunch) sessionStorage.setItem('petcare_launched', '1');
+
 
   return (
-    <div data-dark={darkMode ? "true" : undefined} className={`flex h-screen bg-slate-50 text-slate-900 overflow-hidden${isFirstLaunch ? ' anim-launch' : ''}`}>
+    <div data-dark={darkMode ? "true" : undefined} className={"flex h-screen bg-slate-50 text-slate-900 overflow-hidden"}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* PWA Install Modal */}
@@ -3161,19 +3169,20 @@ export default function App() {
           )}
         </div>
 
-        <nav className="md:hidden flex bg-white border-t border-slate-100 px-2 py-2 shrink-0 items-center">
+        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 py-2 shrink-0">
           {NAV.map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
               className={`flex-1 flex flex-col items-center gap-1 py-1 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
               <item.icon size={19} /><span className="text-[9px] font-bold">{item.label}</span>
             </button>
           ))}
+          {/* FAB Darurat — melayang di atas kanan navbar */}
           <button onClick={handlePanggilDokter}
-            className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all text-rose-500 active:scale-95">
-            <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center shadow-md shadow-rose-200">
-              <Phone size={15} className="text-white" />
+            className="absolute -top-14 right-4 flex flex-col items-center gap-1 active:scale-95 transition-transform">
+            <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center shadow-lg shadow-rose-300 ring-4 ring-white">
+              <Phone size={18} className="text-white" />
             </div>
-            <span className="text-[9px] font-bold text-rose-500">Darurat</span>
+            <span className="text-[9px] font-black text-rose-500 bg-white px-1.5 py-0.5 rounded-full shadow-sm">Darurat</span>
           </button>
         </nav>
       </main>
