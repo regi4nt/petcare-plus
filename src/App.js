@@ -2282,12 +2282,12 @@ const AddPetModal = ({ onClose, onAdd, loading }) => {
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
+        <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
           <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full" />
           <div className="absolute right-8 bottom-0 w-14 h-14 bg-white/10 rounded-full" />
           <div className="flex justify-between items-start relative">
             <div>
-              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mb-1">Daftarkan Hewan</p>
+              <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-1">Daftarkan Hewan</p>
               <h3 className="text-2xl font-black text-white">Tambah Anabul</h3>
             </div>
             <button onClick={onClose} className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all"><X size={18} /></button>
@@ -3066,12 +3066,12 @@ export default function App() {
   const MOBILE_NAV = NAV.filter(n => n.id !== 'settings');
 
   const unreadCount = notifications.filter(n => n.unread).length;
-  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
+  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
 
 
   return (
-    <div data-dark={darkMode ? "true" : undefined} className={"flex h-screen bg-slate-50 text-slate-900 overflow-hidden"}>
+    <div data-dark={darkMode ? "true" : undefined} className={"flex bg-slate-50 text-slate-900 overflow-hidden"} style={{height: '100dvh', minHeight: '-webkit-fill-available'}}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* PWA Install Modal */}
@@ -3089,6 +3089,7 @@ export default function App() {
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 p-5 shrink-0">
         <div className="flex items-center gap-3 mb-8">
           <img src="/logo.svg" alt="PetCare+" className="w-10 h-10 rounded-xl shadow-md shadow-indigo-200" />
+          <span className="text-xl font-black text-slate-800">PetCare<span className="text-indigo-500">+</span></span>
         </div>
         <nav className="flex-1 space-y-1">
           {NAV.map(item => (
@@ -3124,9 +3125,10 @@ export default function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-white border-b border-slate-100 px-4 flex items-center justify-between z-40 shrink-0">
           <div className="flex items-center gap-2.5">
-            {/* Logo — mobile only (md:hidden replaces it with sidebar) */}
+            {/* Logo + name — mobile only */}
             <img src="/logo.svg" alt="PetCare+" className="md:hidden w-8 h-8 rounded-lg" />
-            <h2 className="text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
+            <span className="md:hidden text-base font-black text-slate-800">PetCare<span className="text-indigo-500">+</span></span>
+            <h2 className="hidden md:block text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
             {/* Banner izin push notifikasi — ditampilkan di header agar tidak ganggu konten */}
             {'Notification' in window && Notification.permission === 'default' && (
               <button
@@ -3178,8 +3180,7 @@ export default function App() {
           )}
         </div>
 
-        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-2 pb-2 shrink-0" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))'}}>
-          {/* Split nav: 2 item kiri - spacer FAB - 2 item kanan */}
+        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-2 pb-2 shrink-0 z-30" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))', overflow: 'visible'}}>          {/* Split nav: 2 item kiri - spacer FAB - 2 item kanan */}
           {MOBILE_NAV.slice(0, 2).map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
               className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
