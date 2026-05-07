@@ -1332,102 +1332,101 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
 
       {/* ── Modal Tambah Jadwal ── */}
       {showForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-[28px] shadow-2xl anim-zoom overflow-hidden">
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
+            {/* Header — sama persis dengan AddPetModal */}
+            <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 ${selType.bg} rounded-xl flex items-center justify-center`}>
+                <div className={`w-10 h-10 ${selType.bg} rounded-2xl flex items-center justify-center`}>
+                  <selType.icon size={18} className={selType.color} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800">Jadwal Baru</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Isi detail kegiatan hewan</p>
+                </div>
+              </div>
+              <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"><X size={20} /></button>
+            </div>
+
+            <form onSubmit={handleAdd} className="space-y-4">
+              {/* Hewan */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-style">Hewan</label>
+                  <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
+                    {pets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-style">Jenis Kegiatan</label>
+                  <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="input-style">
+                    {SCHEDULE_TYPES.map(t => <option key={t.type}>{t.type}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Nama kegiatan */}
+              <div>
+                <label className="label-style">Nama Kegiatan</label>
+                <input required type="text" placeholder="Contoh: Makan pagi, Vaksin rabies..." value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="input-style" />
+              </div>
+
+              {/* Waktu */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-style">Tanggal Mulai</label>
+                  <input required type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-style" />
+                </div>
+                <div>
+                  <label className="label-style">Jam</label>
+                  <input required type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="input-style" />
+                </div>
+              </div>
+
+              {/* Perulangan */}
+              <div>
+                <label className="label-style">Perulangan</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {RECURRENCE_OPTIONS.map(opt => (
+                    <button key={opt.value} type="button" onClick={() => setForm({ ...form, recurrence: opt.value })}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${form.recurrence === opt.value ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
+                      <span className="text-base leading-none">{opt.icon}</span>
+                      <div>
+                        <p className="text-xs font-bold">{opt.label}</p>
+                        <p className="text-[10px] opacity-60">{opt.desc}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {form.recurrence !== 'Sekali' && (
+                  <div className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-medium mt-2 ${RECURRENCE_COLORS[form.recurrence]}`}>
+                    <RefreshCw size={12} />
+                    Akan membuat {generateRecurrenceDates(form.date, form.recurrence).length} jadwal otomatis mulai {formatDate(form.date)}
+                  </div>
+                )}
+              </div>
+
+              {/* Catatan */}
+              <div>
+                <label className="label-style">Catatan <span className="text-slate-400 font-normal normal-case">(opsional)</span></label>
+                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Tambahkan catatan tambahan..." className="input-style resize-none" />
+              </div>
+
+              {/* Preview */}
+              <div className="p-4 bg-slate-50 rounded-2xl flex items-center gap-3">
+                <div className={`w-9 h-9 ${selType.bg} rounded-xl flex items-center justify-center shrink-0`}>
                   <selType.icon size={16} className={selType.color} />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800">Jadwal Baru</h3>
-                  <p className="text-[11px] text-slate-400">Isi detail kegiatan hewan</p>
+                  <p className="font-bold text-slate-700 text-sm">{form.title || 'Nama Kegiatan'}</p>
+                  <p className="text-xs text-slate-500">{form.type} · {form.date || 'Pilih tanggal'} · {form.time || '--:--'}</p>
                 </div>
               </div>
-              <button onClick={() => setShowForm(false)} className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 transition-all">
-                <X size={16} />
+
+              <button type="submit" disabled={saving}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                {saving ? <><Loader2 size={17} className="animate-spin" />Menyimpan...</> : <>Simpan Jadwal{form.recurrence !== 'Sekali' ? ` (${generateRecurrenceDates(form.date, form.recurrence).length}x)` : ''}</>}
               </button>
-            </div>
-
-            <form onSubmit={handleAdd} className="overflow-y-auto max-h-[70vh]">
-              <div className="px-6 py-5 space-y-5">
-
-                {/* Hewan & Jenis */}
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Hewan & Jenis</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label-style">Hewan</label>
-                      <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
-                        {pets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label-style">Jenis Kegiatan</label>
-                      <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="input-style">
-                        {SCHEDULE_TYPES.map(t => <option key={t.type}>{t.type}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label-style">Nama Kegiatan</label>
-                    <input required type="text" placeholder="Contoh: Makan pagi, Vaksin rabies..." value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="input-style" />
-                  </div>
-                </div>
-
-                {/* Waktu */}
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Waktu</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label-style">Tanggal Mulai</label>
-                      <input required type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-style" />
-                    </div>
-                    <div>
-                      <label className="label-style">Jam</label>
-                      <input required type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="input-style" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Perulangan */}
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Perulangan</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {RECURRENCE_OPTIONS.map(opt => (
-                      <button key={opt.value} type="button" onClick={() => setForm({ ...form, recurrence: opt.value })}
-                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${form.recurrence === opt.value ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
-                        <span className="text-base leading-none">{opt.icon}</span>
-                        <div>
-                          <p className="text-xs font-bold">{opt.label}</p>
-                          <p className="text-[10px] opacity-60">{opt.desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  {form.recurrence !== 'Sekali' && (
-                    <div className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-medium ${RECURRENCE_COLORS[form.recurrence]}`}>
-                      <RefreshCw size={12} />
-                      Akan membuat {generateRecurrenceDates(form.date, form.recurrence).length} jadwal otomatis mulai {formatDate(form.date)}
-                    </div>
-                  )}
-                </div>
-
-                {/* Catatan */}
-                <div>
-                  <label className="label-style">Catatan <span className="text-slate-400 font-normal">(opsional)</span></label>
-                  <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Tambahkan catatan tambahan..." className="input-style resize-none" />
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 pb-6">
-                <button type="submit" disabled={saving}
-                  className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-                  {saving ? <><Loader2 size={16} className="animate-spin" /> Menyimpan...</> : <><Check size={16} /> Simpan Jadwal{form.recurrence !== 'Sekali' ? ` (${generateRecurrenceDates(form.date, form.recurrence).length}x)` : ''}</>}
-                </button>
-              </div>
             </form>
           </div>
         </div>
@@ -1553,91 +1552,83 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
 
       {/* ── Modal Detail ── */}
       {selected && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setSelected(null)}>
-          <div className="bg-white w-full max-w-md rounded-[28px] shadow-2xl anim-zoom overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setSelected(null)}>
+          <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
             {/* Header */}
-            <div className={`px-6 pt-6 pb-5 border-b border-slate-100`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 ${(MEDICAL_TYPE_META[selected.type] || {}).bg || 'bg-slate-50'} rounded-2xl flex items-center justify-center shrink-0`}>
-                    <Stethoscope size={18} className={(MEDICAL_TYPE_META[selected.type] || {}).color || 'text-slate-600'} />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-slate-800 leading-tight">{selected.title}</h3>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(MEDICAL_TYPE_META[selected.type] || {}).badge || 'bg-slate-100 text-slate-600'}`}>{selected.type}</span>
-                  </div>
+            <div className="flex justify-between items-start mb-5">
+              <div className="flex items-center gap-3">
+                <div className={`w-11 h-11 ${(MEDICAL_TYPE_META[selected.type] || {}).bg || 'bg-slate-50'} rounded-2xl flex items-center justify-center shrink-0`}>
+                  <Stethoscope size={20} className={(MEDICAL_TYPE_META[selected.type] || {}).color || 'text-slate-600'} />
                 </div>
-                <button onClick={() => setSelected(null)} className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 transition-all shrink-0">
-                  <X size={15} />
-                </button>
+                <div>
+                  <h3 className="font-black text-slate-800 text-lg leading-tight">{selected.title}</h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(MEDICAL_TYPE_META[selected.type] || {}).badge || 'bg-slate-100 text-slate-600'}`}>{selected.type}</span>
+                </div>
               </div>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-5 space-y-3 max-h-[55vh] overflow-y-auto">
-              {/* Info klinik */}
-              <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Informasi Kunjungan</p>
-                {[
-                  ['Tanggal', formatDate(selected.date)],
-                  ['Dokter', selected.doctor || '—'],
-                  ['Klinik', selected.clinic || '—'],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between items-center">
-                    <span className="text-xs text-slate-500">{k}</span>
-                    <span className="text-xs font-bold text-slate-800">{v}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Vital */}
-              {(selected.weight || selected.temp) && (
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Data Vital</p>
-                  {selected.weight && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">Berat Badan</span>
-                      <span className="text-xs font-bold text-slate-800">{selected.weight} kg</span>
-                    </div>
-                  )}
-                  {selected.temp && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">Suhu Tubuh</span>
-                      <span className="text-xs font-bold text-slate-800">{selected.temp}°C</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Catatan */}
-              {selected.notes && (
-                <div className="bg-slate-50 rounded-2xl p-4">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Catatan</p>
-                  <p className="text-sm text-slate-700 leading-relaxed">{selected.notes}</p>
-                </div>
-              )}
-
-              {/* Kunjungan berikut */}
-              {selected.next_visit && (
-                <div className={`p-4 rounded-2xl flex items-center gap-3 ${selected.next_visit < todayStr ? 'bg-rose-50' : 'bg-emerald-50'}`}>
-                  <Calendar size={16} className={selected.next_visit < todayStr ? 'text-rose-500' : 'text-emerald-500'} />
-                  <div>
-                    <p className={`text-[10px] font-black uppercase tracking-wider mb-0.5 ${selected.next_visit < todayStr ? 'text-rose-400' : 'text-emerald-500'}`}>
-                      {selected.next_visit < todayStr ? 'Kontrol Terlewat' : 'Jadwal Kontrol'}
-                    </p>
-                    <p className={`text-sm font-bold ${selected.next_visit < todayStr ? 'text-rose-700' : 'text-emerald-700'}`}>{formatDate(selected.next_visit)}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 pb-6 pt-2">
-              <button onClick={() => setDeleteConfirmId(selected.id)}
-                className="w-full py-3 bg-rose-50 text-rose-600 rounded-2xl font-bold text-sm hover:bg-rose-100 transition-all flex items-center justify-center gap-2">
-                <Trash2 size={14} /> Hapus Catatan
+              <button onClick={() => setSelected(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all shrink-0">
+                <X size={18} />
               </button>
             </div>
+
+            {/* Info kunjungan */}
+            <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5 mb-3">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Informasi Kunjungan</p>
+              {[
+                ['Tanggal', formatDate(selected.date)],
+                ['Dokter', selected.doctor || '—'],
+                ['Klinik', selected.clinic || '—'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500">{k}</span>
+                  <span className="text-xs font-bold text-slate-800">{v}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Vital */}
+            {(selected.weight || selected.temp) && (
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5 mb-3">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">Data Vital</p>
+                {selected.weight && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-500">Berat Badan</span>
+                    <span className="text-xs font-bold text-slate-800">{selected.weight} kg</span>
+                  </div>
+                )}
+                {selected.temp && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-500">Suhu Tubuh</span>
+                    <span className="text-xs font-bold text-slate-800">{selected.temp}°C</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Catatan */}
+            {selected.notes && (
+              <div className="bg-slate-50 rounded-2xl p-4 mb-3">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2">Catatan</p>
+                <p className="text-sm text-slate-700 leading-relaxed">{selected.notes}</p>
+              </div>
+            )}
+
+            {/* Kunjungan berikut */}
+            {selected.next_visit && (
+              <div className={`p-4 rounded-2xl flex items-center gap-3 mb-4 ${selected.next_visit < todayStr ? 'bg-rose-50' : 'bg-emerald-50'}`}>
+                <Calendar size={16} className={selected.next_visit < todayStr ? 'text-rose-500' : 'text-emerald-500'} />
+                <div>
+                  <p className={`text-[10px] font-black uppercase tracking-wider mb-0.5 ${selected.next_visit < todayStr ? 'text-rose-400' : 'text-emerald-500'}`}>
+                    {selected.next_visit < todayStr ? 'Kontrol Terlewat' : 'Jadwal Kontrol'}
+                  </p>
+                  <p className={`text-sm font-bold ${selected.next_visit < todayStr ? 'text-rose-700' : 'text-emerald-700'}`}>{formatDate(selected.next_visit)}</p>
+                </div>
+              </div>
+            )}
+
+            <button onClick={() => setDeleteConfirmId(selected.id)}
+              className="w-full py-3 bg-rose-50 text-rose-600 rounded-2xl font-bold text-sm hover:bg-rose-100 transition-all flex items-center justify-center gap-2">
+              <Trash2 size={14} /> Hapus Catatan
+            </button>
           </div>
         </div>
       )}
@@ -1645,15 +1636,15 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
       {/* ── Modal Konfirmasi Hapus ── */}
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[28px] p-6 max-w-sm w-full shadow-2xl anim-zoom text-center">
-            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white rounded-[32px] p-7 max-w-sm w-full shadow-2xl anim-zoom text-center">
+            <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 size={22} className="text-rose-500" />
             </div>
             <h4 className="font-black text-slate-800 text-lg mb-2">Hapus Catatan?</h4>
-            <p className="text-sm text-slate-500 mb-6">Data rekam medis ini akan dihapus permanen.</p>
+            <p className="text-sm text-slate-500 mb-6">Data rekam medis ini akan dihapus permanen dan tidak dapat dikembalikan.</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all">Batal</button>
-              <button onClick={() => handleDelete(deleteConfirmId)} className="flex-1 py-3 bg-rose-500 text-white rounded-2xl font-bold text-sm hover:bg-rose-600 transition-all">Hapus</button>
+              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-3.5 bg-slate-100 text-slate-700 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all">Batal</button>
+              <button onClick={() => handleDelete(deleteConfirmId)} className="flex-1 py-3.5 bg-rose-500 text-white rounded-2xl font-bold text-sm hover:bg-rose-600 transition-all">Hapus</button>
             </div>
           </div>
         </div>
@@ -1661,104 +1652,100 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
 
       {/* ── Modal Form Tambah ── */}
       {showForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-[28px] shadow-2xl anim-zoom overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
+            {/* Header — sama persis dengan AddPetModal */}
+            <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center">
-                  <Stethoscope size={16} className="text-indigo-600" />
+                <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                  <Stethoscope size={18} className="text-indigo-600" />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-800">Catatan Medis Baru</h3>
-                  <p className="text-[11px] text-slate-400">Isi informasi kunjungan</p>
+                  <h3 className="text-xl font-black text-slate-800">Catatan Medis Baru</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Isi informasi kunjungan</p>
                 </div>
               </div>
-              <button onClick={() => setShowForm(false)} className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 transition-all">
-                <X size={16} />
-              </button>
+              <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"><X size={20} /></button>
             </div>
 
-            <form onSubmit={handleAdd} className="overflow-y-auto max-h-[70vh]">
-              <div className="px-6 py-5 space-y-5">
-
-                {/* Hewan & Jenis */}
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Hewan & Prosedur</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label-style">Hewan</label>
-                      <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
-                        {pets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label-style">Jenis</label>
-                      <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="input-style">
-                        {RECORD_TYPES.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label-style">Judul / Nama Prosedur</label>
-                    <input required type="text" placeholder="Contoh: Vaksin rabies, Operasi steril..." value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="input-style" />
-                  </div>
-                  <div>
-                    <label className="label-style">Tanggal</label>
-                    <input required type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-style" />
-                  </div>
+            <form onSubmit={handleAdd} className="space-y-4">
+              {/* Hewan & Jenis */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-style">Hewan</label>
+                  <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
+                    {pets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
                 </div>
-
-                {/* Klinik & Dokter */}
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Klinik & Dokter</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label-style">Nama Dokter</label>
-                      <input type="text" placeholder="drh. ..." value={form.doctor} onChange={e => setForm({ ...form, doctor: e.target.value })} className="input-style" />
-                    </div>
-                    <div>
-                      <label className="label-style">Nama Klinik</label>
-                      <input type="text" value={form.clinic} onChange={e => setForm({ ...form, clinic: e.target.value })} className="input-style" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Vital */}
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Data Vital <span className="text-slate-300 font-normal normal-case">(opsional)</span></p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label-style">Berat (kg)</label>
-                      <input type="number" step="0.01" placeholder="0.0" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" />
-                    </div>
-                    <div>
-                      <label className="label-style">Suhu (°C)</label>
-                      <input type="number" step="0.1" placeholder="38.5" value={form.temp} onChange={e => setForm({ ...form, temp: e.target.value })} className="input-style" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Catatan & Follow-up */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="label-style">Catatan <span className="text-slate-400 font-normal">(opsional)</span></label>
-                    <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Hasil pemeriksaan, obat yang diberikan, dll..." className="input-style resize-none" />
-                  </div>
-                  <div>
-                    <label className="label-style">Kunjungan Berikutnya <span className="text-slate-400 font-normal">(opsional)</span></label>
-                    <input type="date" value={form.next_visit} onChange={e => setForm({ ...form, next_visit: e.target.value })} className="input-style" />
-                  </div>
+                <div>
+                  <label className="label-style">Jenis Prosedur</label>
+                  <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="input-style">
+                    {RECORD_TYPES.map(t => <option key={t}>{t}</option>)}
+                  </select>
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="px-6 pb-6">
-                <button type="submit" disabled={saving}
-                  className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-                  {saving ? <><Loader2 size={16} className="animate-spin" /> Menyimpan...</> : <><Check size={16} /> Simpan Catatan</>}
-                </button>
+              {/* Judul & Tanggal */}
+              <div>
+                <label className="label-style">Judul / Nama Prosedur</label>
+                <input required type="text" placeholder="Contoh: Vaksin rabies, Operasi steril..." value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="input-style" />
               </div>
+              <div>
+                <label className="label-style">Tanggal</label>
+                <input required type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-style" />
+              </div>
+
+              {/* Dokter & Klinik */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-style">Nama Dokter</label>
+                  <input type="text" placeholder="drh. ..." value={form.doctor} onChange={e => setForm({ ...form, doctor: e.target.value })} className="input-style" />
+                </div>
+                <div>
+                  <label className="label-style">Nama Klinik</label>
+                  <input type="text" placeholder="Klinik Hewan..." value={form.clinic} onChange={e => setForm({ ...form, clinic: e.target.value })} className="input-style" />
+                </div>
+              </div>
+
+              {/* Vital */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-style">Berat (kg) <span className="normal-case font-normal">(opsional)</span></label>
+                  <input type="number" step="0.01" placeholder="0.0" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" />
+                </div>
+                <div>
+                  <label className="label-style">Suhu (°C) <span className="normal-case font-normal">(opsional)</span></label>
+                  <input type="number" step="0.1" placeholder="38.5" value={form.temp} onChange={e => setForm({ ...form, temp: e.target.value })} className="input-style" />
+                </div>
+              </div>
+
+              {/* Catatan */}
+              <div>
+                <label className="label-style">Catatan <span className="text-slate-400 font-normal normal-case">(opsional)</span></label>
+                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Hasil pemeriksaan, obat yang diberikan, dll..." className="input-style resize-none" />
+              </div>
+
+              {/* Kunjungan berikutnya */}
+              <div>
+                <label className="label-style">Kunjungan Berikutnya <span className="text-slate-400 font-normal normal-case">(opsional)</span></label>
+                <input type="date" value={form.next_visit} onChange={e => setForm({ ...form, next_visit: e.target.value })} className="input-style" />
+              </div>
+
+              {/* Preview */}
+              <div className="p-4 bg-slate-50 rounded-2xl flex items-center gap-3">
+                <div className={`w-9 h-9 ${(MEDICAL_TYPE_META[form.type] || {}).bg || 'bg-slate-50'} rounded-xl flex items-center justify-center shrink-0`}>
+                  <Stethoscope size={16} className={(MEDICAL_TYPE_META[form.type] || {}).color || 'text-slate-500'} />
+                </div>
+                <div>
+                  <p className="font-bold text-slate-700 text-sm">{form.title || 'Nama Prosedur'}</p>
+                  <p className="text-xs text-slate-500">{form.type} · {form.date || 'Pilih tanggal'}{form.doctor ? ` · ${form.doctor}` : ''}</p>
+                </div>
+              </div>
+
+              <button type="submit" disabled={saving}
+                className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                {saving ? <><Loader2 size={17} className="animate-spin" />Menyimpan...</> : 'Simpan Catatan'}
+              </button>
             </form>
           </div>
         </div>
