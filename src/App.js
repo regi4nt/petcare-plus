@@ -6,7 +6,7 @@ import {
   ToggleLeft, ToggleRight, Phone, Mail, Lock, Eye, EyeOff, Check,
   FileText, Pill, Stethoscope, Syringe, Droplets,
   UtensilsCrossed, Dumbbell, LucideStar, Info, BookOpen, Loader2,
-  Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint
+  Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint, Moon, Sun
 } from 'lucide-react';
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService } from './lib/api';
 
@@ -142,21 +142,16 @@ const formatWeight = (weight) => {
 
 // ─── PUSH NOTIFICATION HOOK ───────────────────────────────────────────
 // Minta izin notifikasi device dan kirim push saat jadwal hampir tiba
-const usePushNotifications = (schedules, pets) => {
+const usePushNotifications = (schedules, pets, notifSettings = {}) => {
   const sentRef = useRef(new Set());
-
-  useEffect(() => {
-    // Minta izin push notification saat pertama kali
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
 
   useEffect(() => {
     if (!schedules?.length) return;
 
     const checkAndNotify = () => {
       if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      // Jika notifikasi jadwal dimatikan, skip semua
+      if (notifSettings.jadwal === false) return;
 
       const now = new Date();
       const todayDate = now.toISOString().split('T')[0];
@@ -172,6 +167,13 @@ const usePushNotifications = (schedules, pets) => {
         const diffMs = scheduleTime - now;
         const diffMin = diffMs / 60000;
 
+        // ── Helper: getar perangkat (mobile) ─────────────────────────
+        const vibrate = (pattern) => {
+          if ('vibrate' in navigator) {
+            try { navigator.vibrate(pattern); } catch (_) {}
+          }
+        };
+
         // Notifikasi 15 menit sebelum jadwal
         const key15 = `15min-${s.id}`;
         if (diffMin > 0 && diffMin <= 15 && !sentRef.current.has(key15)) {
@@ -184,6 +186,8 @@ const usePushNotifications = (schedules, pets) => {
             tag: key15,
           });
           n.onclick = () => { window.focus(); n.close(); };
+          // Getar: pendek-pendek (perhatian)
+          vibrate([150, 80, 150]);
         }
 
         // Notifikasi tepat waktu
@@ -198,6 +202,8 @@ const usePushNotifications = (schedules, pets) => {
             tag: keyNow,
           });
           n.onclick = () => { window.focus(); n.close(); };
+          // Getar: panjang-pendek-panjang (mendesak)
+          vibrate([300, 100, 300, 100, 300]);
         }
       });
     };
@@ -218,8 +224,11 @@ const getSmartTips = (pet, records) => {
   const smartTips = [];
 
   if (petRecords.length === 0) {
-    // Belum ada rekam medis — tampilkan tips default
-    return speciesTips.slice(0, 2);
+    // Belum ada rekam medis — pilih satu tips secara acak berdasarkan hari + pet
+    const dateKey = new Date().toISOString().split('T')[0] + (pet.id || '');
+    let hash = 0;
+    for (let i = 0; i < dateKey.length; i++) hash = (hash * 31 + dateKey.charCodeAt(i)) & 0x7fffffff;
+    return [speciesTips[hash % speciesTips.length]];
   }
 
   // Cek apakah ada kunjungan berikutnya yang terlewat atau mendekati
@@ -300,8 +309,11 @@ const getSmartTips = (pet, records) => {
 
   // Tambahkan tips spesies sebagai fallback jika belum ada smart tip
   if (smartTips.length === 0) {
-    const todayIdx = new Date().getDate();
-    smartTips.push(speciesTips[todayIdx % speciesTips.length]);
+    // Seed dari tanggal + pet.id agar berbeda tiap hari dan tiap hewan, tapi stabil dalam sehari
+    const dateKey = new Date().toISOString().split('T')[0] + (pet.id || '');
+    let hash = 0;
+    for (let i = 0; i < dateKey.length; i++) hash = (hash * 31 + dateKey.charCodeAt(i)) & 0x7fffffff;
+    smartTips.push(speciesTips[hash % speciesTips.length]);
   }
 
   return smartTips.slice(0, 1);
@@ -385,9 +397,7 @@ const AuthPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md anim-zoom">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-indigo-500 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-indigo-500/40">
-            <HeartPulse size={40} className="text-white" />
-          </div>
+          <img src="/logo.svg" alt="PetCare+" className="w-20 h-20 mx-auto mb-4 rounded-3xl shadow-2xl shadow-indigo-500/40" />
           <h1 className="text-4xl font-black text-white tracking-tight">PetCare<span className="text-indigo-400">+</span></h1>
           <p className="text-indigo-300 mt-2 font-medium">Platform kesehatan hewan peliharaan</p>
         </div>
@@ -543,7 +553,7 @@ const getIotHealthTip = (score, iotCalc, petName) => {
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────
-const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records, onAlert, onUpdatePet, onDeletePet }) => {
+const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records, onAlert, onUpdatePet, onDeletePet, streak = 0, profile }) => {
   const [iotCalc, setIotCalc]         = useState(null);
   const [dailyHealth, setDailyHealth] = useState([]);
   const [iotLoading, setIotLoading]   = useState(false);
@@ -762,6 +772,95 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
 
   return (
     <div className="space-y-6 anim-slide-up">
+
+      {/* ── Streak Card (Basic) ── */}
+      {(profile?.role === 'Basic' || !profile?.role) && (() => {
+        const nextMilestone = streak < 7 ? 7 : streak < 14 ? 14 : streak < 30 ? 30 : streak < 60 ? 60 : streak < 100 ? 100 : null;
+        const progressTarget = nextMilestone || 100;
+        const progressPct = Math.min((streak / progressTarget) * 100, 100);
+        const milestone = streak >= 100 ? { label: '🏆 Legenda 100 Hari!', bg: 'from-yellow-500 to-amber-400' }
+          : streak >= 60 ? { label: '💎 Master 60 Hari!', bg: 'from-violet-500 to-purple-600' }
+          : streak >= 30 ? { label: '🌟 30 Hari Hebat!', bg: 'from-indigo-500 to-blue-600' }
+          : streak >= 14 ? { label: '⚡ 14 Hari Konsisten!', bg: 'from-teal-500 to-emerald-500' }
+          : streak >= 7  ? { label: '🎯 7 Hari Pertama!', bg: 'from-orange-400 to-rose-500' }
+          : null;
+        const gradientBg = milestone?.bg || 'from-orange-400 to-rose-500';
+
+        const flameSize = streak >= 30 ? 'text-4xl' : streak >= 7 ? 'text-3xl' : 'text-2xl';
+
+        return (
+          <section>
+            <div className={`bg-gradient-to-br ${gradientBg} rounded-2xl p-4 shadow-md text-white`}>
+              <div className="flex items-center justify-between">
+                {/* Kiri: flame + angka */}
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center ${flameSize} leading-none select-none`}>
+                    🔥
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold opacity-80 uppercase tracking-wide">Login Streak</p>
+                    <p className="text-3xl font-black leading-none">{streak} <span className="text-lg font-bold opacity-90">hari</span></p>
+                    {streak === 0 && <p className="text-[11px] opacity-70 mt-0.5">Login tiap hari untuk memulai!</p>}
+                    {streak > 0 && streak < 7 && <p className="text-[11px] opacity-70 mt-0.5">Terus semangat! 💪</p>}
+                  </div>
+                </div>
+                {/* Kanan: badge milestone atau target */}
+                <div className="text-right flex flex-col items-end gap-1.5">
+                  {milestone ? (
+                    <div className="bg-white/25 backdrop-blur-sm px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-sm">
+                      {milestone.label}
+                    </div>
+                  ) : (
+                    <div className="bg-white/20 px-3 py-1.5 rounded-xl text-[11px] font-semibold opacity-90 leading-snug text-right">
+                      🎯 Target<br/>
+                      <span className="text-sm font-black">{nextMilestone} hari</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              {nextMilestone && (
+                <div className="mt-3.5">
+                  <div className="flex items-center justify-between text-[11px] opacity-75 mb-1.5">
+                    <span>Menuju {nextMilestone} hari</span>
+                    <span>{streak}/{nextMilestone}</span>
+                  </div>
+                  <div className="bg-white/25 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-white rounded-full h-2 transition-all duration-500"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Milestone badges row */}
+              <div className="flex items-center gap-1.5 mt-3">
+                {[
+                  { days: 7,  icon: '🎯', label: '7' },
+                  { days: 14, icon: '⚡', label: '14' },
+                  { days: 30, icon: '🌟', label: '30' },
+                  { days: 60, icon: '💎', label: '60' },
+                  { days: 100, icon: '🏆', label: '100' },
+                ].map(m => (
+                  <div
+                    key={m.days}
+                    className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all ${
+                      streak >= m.days
+                        ? 'bg-white text-orange-500 shadow-sm'
+                        : 'bg-white/20 text-white/70'
+                    }`}
+                  >
+                    <span>{m.icon}</span>
+                    <span>{m.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ── Pet Selector ── */}
       <section>
@@ -1045,17 +1144,27 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
           {/* Tips grid — tampilkan 2 atau semua */}
           {(() => {
             const tips = TIPS_DB[tipsSpecies] || TIPS_DB['Kucing'];
-            const gradients = ['from-indigo-500 to-violet-600', 'from-emerald-500 to-teal-600', 'from-amber-500 to-orange-600', 'from-rose-500 to-pink-600', 'from-sky-500 to-blue-600'];
+            const accents = [
+              { border: 'border-l-indigo-400', icon: 'bg-indigo-50 text-indigo-500', badge: 'bg-indigo-50 text-indigo-600' },
+              { border: 'border-l-emerald-400', icon: 'bg-emerald-50 text-emerald-500', badge: 'bg-emerald-50 text-emerald-600' },
+              { border: 'border-l-amber-400',   icon: 'bg-amber-50 text-amber-500',   badge: 'bg-amber-50 text-amber-600' },
+              { border: 'border-l-rose-400',    icon: 'bg-rose-50 text-rose-500',     badge: 'bg-rose-50 text-rose-600' },
+              { border: 'border-l-sky-400',     icon: 'bg-sky-50 text-sky-500',       badge: 'bg-sky-50 text-sky-600' },
+            ];
             const shown = showTipsPanel ? tips : tips.slice(0, 2);
             return (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {shown.map((tip, i) => {
                   const Icon = tip.icon;
+                  const acc = accents[i % accents.length];
                   return (
-                    <div key={i} className={`bg-gradient-to-br ${gradients[i % gradients.length]} p-5 rounded-[22px] text-white shadow-md hover:-translate-y-0.5 transition-all`}>
-                      <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center mb-3"><Icon size={17} /></div>
-                      <h4 className="font-black text-sm mb-1.5">{tip.title}</h4>
-                      <p className="text-[11px] opacity-90 leading-relaxed">{tip.body}</p>
+                    <div key={i} className={`bg-white border border-slate-100 border-l-4 ${acc.border} p-4 rounded-2xl hover:shadow-md hover:-translate-y-0.5 transition-all flex gap-3 items-start`}>
+                      <div className={`w-9 h-9 ${acc.icon} rounded-xl flex items-center justify-center shrink-0 mt-0.5`}><Icon size={16} /></div>
+                      <div>
+                        <span className={`text-[9px] font-black uppercase tracking-wider ${acc.badge} px-2 py-0.5 rounded-full`}>Tips #{i + 1}</span>
+                        <h4 className="font-black text-sm text-slate-800 mt-1 mb-1">{tip.title}</h4>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">{tip.body}</p>
+                      </div>
                     </div>
                   );
                 })}
@@ -1083,16 +1192,67 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
 };
 
 // ─── SCHEDULE PAGE ────────────────────────────────────────────────────
+const RECURRENCE_OPTIONS = [
+  { value: 'Sekali',    label: 'Sekali',          desc: 'Satu kali saja',         icon: '📌' },
+  { value: 'Harian',   label: 'Harian',           desc: 'Ulangi 7 hari',          icon: '🔁' },
+  { value: 'Mingguan', label: 'Mingguan',         desc: 'Ulangi 4 minggu',        icon: '📅' },
+  { value: 'Bulanan',  label: 'Bulanan',          desc: 'Ulangi 3 bulan',         icon: '🗓️' },
+];
+
+const RECURRENCE_COLORS = {
+  Harian:   'bg-sky-50 text-sky-600 border-sky-200',
+  Mingguan: 'bg-violet-50 text-violet-600 border-violet-200',
+  Bulanan:  'bg-amber-50 text-amber-600 border-amber-200',
+};
+
+const generateRecurrenceDates = (startDate, recurrence) => {
+  const dates = [];
+  const start = new Date(startDate + 'T12:00:00');
+  if (recurrence === 'Harian') {
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start); d.setDate(d.getDate() + i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+  } else if (recurrence === 'Mingguan') {
+    for (let i = 0; i < 4; i++) {
+      const d = new Date(start); d.setDate(d.getDate() + i * 7);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+  } else if (recurrence === 'Bulanan') {
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(start); d.setMonth(d.getMonth() + i);
+      dates.push(d.toISOString().split('T')[0]);
+    }
+  } else {
+    dates.push(startDate);
+  }
+  return dates;
+};
+
+const BLANK_SCHED = (pets) => ({ pet_id: pets[0]?.id || '', type: 'Makan', title: '', date: todayStr, time: '08:00', notes: '', recurrence: 'Sekali' });
+
 const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('all');
-  const [form, setForm] = useState({ pet_id: pets[0]?.id || '', type: 'Makan', title: '', date: todayStr, time: '08:00', notes: '' });
+  const [form, setForm] = useState(BLANK_SCHED(pets));
+
+  const resetForm = () => setForm(BLANK_SCHED(pets));
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    await onAdd(form);
-    setShowForm(false);
-    setForm({ pet_id: pets[0]?.id || '', type: 'Makan', title: '', date: todayStr, time: '08:00', notes: '' });
+    setSaving(true);
+    try {
+      const { recurrence, ...baseData } = form;
+      const dates = generateRecurrenceDates(form.date, recurrence);
+      for (const date of dates) {
+        await onAdd({ ...baseData, date });
+      }
+      setShowForm(false);
+      resetForm();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const filtered = (schedules || []).filter(s => {
@@ -1103,6 +1263,178 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
   }).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
   const getPet = (id) => (pets || []).find(p => p.id === id);
+  const selType = SCHEDULE_TYPES.find(t => t.type === form.type) || SCHEDULE_TYPES[0];
+
+  return (
+    <div className="anim-slide-up">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-xl font-black text-slate-800">Kalender Kegiatan</h3>
+          <p className="text-sm text-slate-500 mt-0.5">{(schedules || []).filter(s => isToday(s.date)).length} kegiatan hari ini</p>
+        </div>
+        <button onClick={() => { resetForm(); setShowForm(true); }}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-sm">
+          <Plus size={16} /> Tambah
+        </button>
+      </div>
+
+      {/* ── Filter tabs ── */}
+      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-1">
+        {[['all', 'Semua'], ['today', 'Hari Ini'], ['upcoming', 'Mendatang'], ['done', 'Selesai']].map(([v, l]) => (
+          <button key={v} onClick={() => setFilter(v)}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${filter === v ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200 hover:border-indigo-300'}`}>{l}</button>
+        ))}
+      </div>
+
+      {/* ── Schedule list ── */}
+      <div className="space-y-3">
+        {filtered.length === 0 && (
+          <div className="text-center py-16 text-slate-400">
+            <Calendar size={44} className="mx-auto mb-3 opacity-30" />
+            <p className="font-semibold">Tidak ada jadwal</p>
+            <p className="text-sm mt-1">Tambahkan jadwal baru untuk memulai</p>
+          </div>
+        )}
+        {filtered.map(s => {
+          const tp = SCHEDULE_TYPES.find(t => t.type === s.type) || SCHEDULE_TYPES[0];
+          const SchedIcon = tp.icon;
+          const pet = getPet(s.pet_id);
+          return (
+            <div key={s.id} className={`bg-white rounded-[24px] border p-4 flex items-center gap-4 hover:shadow-md transition-all group ${s.done ? 'border-slate-100 opacity-60' : isToday(s.date) ? 'border-indigo-200 shadow-sm' : 'border-slate-100'}`}>
+              <div className={`${tp.bg} w-11 h-11 rounded-2xl flex items-center justify-center shrink-0`}>
+                <SchedIcon size={18} className={tp.color} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className={`font-bold text-slate-800 text-sm ${s.done ? 'line-through text-slate-400' : ''}`}>{s.title}</p>
+                  {isToday(s.date) && !s.done && <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full">Hari Ini</span>}
+                </div>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {pet && <span className="text-xs text-slate-500 font-medium">{pet.name}</span>}
+                  <span className="text-[10px] text-slate-400">{formatDate(s.date)} · {s.time}</span>
+                </div>
+                {s.notes && <p className="text-[11px] text-slate-400 mt-1 italic truncate">{s.notes}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => onToggle(s.id, !s.done)}
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${s.done ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-emerald-100 hover:text-emerald-600'}`}>
+                  <Check size={14} />
+                </button>
+                <button onClick={() => onDelete(s.id)} className="w-8 h-8 rounded-xl bg-rose-50 text-rose-400 hover:bg-rose-100 flex items-center justify-center transition-all">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Modal Tambah Jadwal ── */}
+      {showForm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="bg-white w-full max-w-md rounded-[28px] shadow-2xl anim-zoom overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 ${selType.bg} rounded-xl flex items-center justify-center`}>
+                  <selType.icon size={16} className={selType.color} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800">Jadwal Baru</h3>
+                  <p className="text-[11px] text-slate-400">Isi detail kegiatan hewan</p>
+                </div>
+              </div>
+              <button onClick={() => setShowForm(false)} className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 transition-all">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdd} className="overflow-y-auto max-h-[70vh]">
+              <div className="px-6 py-5 space-y-5">
+
+                {/* Hewan & Jenis */}
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Hewan & Jenis</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label-style">Hewan</label>
+                      <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
+                        {pets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label-style">Jenis Kegiatan</label>
+                      <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="input-style">
+                        {SCHEDULE_TYPES.map(t => <option key={t.type}>{t.type}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label-style">Nama Kegiatan</label>
+                    <input required type="text" placeholder="Contoh: Makan pagi, Vaksin rabies..." value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="input-style" />
+                  </div>
+                </div>
+
+                {/* Waktu */}
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Waktu</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label-style">Tanggal Mulai</label>
+                      <input required type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-style" />
+                    </div>
+                    <div>
+                      <label className="label-style">Jam</label>
+                      <input required type="time" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} className="input-style" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Perulangan */}
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Perulangan</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {RECURRENCE_OPTIONS.map(opt => (
+                      <button key={opt.value} type="button" onClick={() => setForm({ ...form, recurrence: opt.value })}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${form.recurrence === opt.value ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`}>
+                        <span className="text-base leading-none">{opt.icon}</span>
+                        <div>
+                          <p className="text-xs font-bold">{opt.label}</p>
+                          <p className="text-[10px] opacity-60">{opt.desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {form.recurrence !== 'Sekali' && (
+                    <div className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-medium ${RECURRENCE_COLORS[form.recurrence]}`}>
+                      <RefreshCw size={12} />
+                      Akan membuat {generateRecurrenceDates(form.date, form.recurrence).length} jadwal otomatis mulai {formatDate(form.date)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Catatan */}
+                <div>
+                  <label className="label-style">Catatan <span className="text-slate-400 font-normal">(opsional)</span></label>
+                  <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Tambahkan catatan tambahan..." className="input-style resize-none" />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 pb-6">
+                <button type="submit" disabled={saving}
+                  className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
+                  {saving ? <><Loader2 size={16} className="animate-spin" /> Menyimpan...</> : <><Check size={16} /> Simpan Jadwal{form.recurrence !== 'Sekali' ? ` (${generateRecurrenceDates(form.date, form.recurrence).length}x)` : ''}</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
   return (
     <div className="anim-slide-up">
@@ -1200,17 +1532,40 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
 };
 
 // ─── MEDICAL PAGE ─────────────────────────────────────────────────────
+const MEDICAL_TYPE_META = {
+  Pemeriksaan: { color: 'text-blue-600',   bg: 'bg-blue-50',   badge: 'bg-blue-50 text-blue-700' },
+  Vaksinasi:   { color: 'text-violet-600', bg: 'bg-violet-50', badge: 'bg-violet-50 text-violet-700' },
+  Pengobatan:  { color: 'text-amber-600',  bg: 'bg-amber-50',  badge: 'bg-amber-50 text-amber-700' },
+  Operasi:     { color: 'text-rose-600',   bg: 'bg-rose-50',   badge: 'bg-rose-50 text-rose-700' },
+  Grooming:    { color: 'text-emerald-600',bg: 'bg-emerald-50',badge: 'bg-emerald-50 text-emerald-700' },
+};
+
+const BLANK_RECORD = (pets) => ({ pet_id: pets[0]?.id || '', date: todayStr, type: 'Pemeriksaan', title: '', doctor: '', clinic: '', weight: '', temp: '', notes: '', next_visit: '' });
+
 const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [filterPet, setFilterPet] = useState('all');
-  const [form, setForm] = useState({ pet_id: pets[0]?.id || '', date: todayStr, type: 'Pemeriksaan', title: '', doctor: '', clinic: '', weight: '', temp: '', notes: '', next_visit: '' });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(BLANK_RECORD(pets));
 
   const handleAdd = async (e) => {
     e.preventDefault();
-    await onAdd(form);
-    setShowForm(false);
-    setForm({ pet_id: pets[0]?.id || '', date: todayStr, type: 'Pemeriksaan', title: '', doctor: '', clinic: '', weight: '', temp: '', notes: '', next_visit: '' });
+    setSaving(true);
+    try {
+      await onAdd(form);
+      setShowForm(false);
+      setForm(BLANK_RECORD(pets));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    await onDelete(id);
+    setDeleteConfirmId(null);
+    setSelected(null);
   };
 
   const filtered = (records || [])
@@ -1218,10 +1573,293 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const getPet = (id) => (pets || []).find(p => p.id === id);
-  const typeColors = {
-    Pemeriksaan: 'bg-blue-50 text-blue-600', Vaksinasi: 'bg-violet-50 text-violet-600',
-    Pengobatan: 'bg-amber-50 text-amber-600', Operasi: 'bg-rose-50 text-rose-600', Grooming: 'bg-emerald-50 text-emerald-600',
-  };
+
+  return (
+    <div className="anim-slide-up">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-xl font-black text-slate-800">Rekam Medis</h3>
+          <p className="text-sm text-slate-500 mt-0.5">{(records || []).length} catatan tersimpan</p>
+        </div>
+        <button onClick={() => { setForm(BLANK_RECORD(pets)); setShowForm(true); }}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-sm">
+          <Plus size={16} /> Tambah
+        </button>
+      </div>
+
+      {/* ── Filter ── */}
+      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-1">
+        <button onClick={() => setFilterPet('all')}
+          className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${filterPet === 'all' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200 hover:border-indigo-300'}`}>
+          Semua
+        </button>
+        {pets.map(p => (
+          <button key={p.id} onClick={() => setFilterPet(p.id)}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${filterPet === p.id ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200 hover:border-indigo-300'}`}>
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Record list ── */}
+      <div className="space-y-3">
+        {filtered.length === 0 && (
+          <div className="text-center py-16 text-slate-400">
+            <FileText size={44} className="mx-auto mb-3 opacity-30" />
+            <p className="font-semibold">Belum ada rekam medis</p>
+            <p className="text-sm mt-1">Tambahkan catatan medis pertama</p>
+          </div>
+        )}
+        {filtered.map(r => {
+          const pet = getPet(r.pet_id);
+          const meta = MEDICAL_TYPE_META[r.type] || { color: 'text-slate-600', bg: 'bg-slate-50', badge: 'bg-slate-100 text-slate-600' };
+          return (
+            <div key={r.id} onClick={() => setSelected(r)}
+              className="bg-white rounded-[24px] border border-slate-100 p-4 cursor-pointer hover:shadow-md hover:border-indigo-100 transition-all group">
+              <div className="flex items-start gap-3">
+                <div className={`${meta.bg} w-11 h-11 rounded-2xl flex items-center justify-center shrink-0`}>
+                  <Stethoscope size={18} className={meta.color} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-bold text-slate-800 text-sm">{r.title}</p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${meta.badge}`}>{r.type}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {pet && <span className="text-xs text-slate-500 font-medium">{pet.name}</span>}
+                    <span className="text-[10px] text-slate-400">{formatDate(r.date)}</span>
+                    {r.doctor && <span className="text-[10px] text-slate-400">· {r.doctor}</span>}
+                  </div>
+                  {r.notes && <p className="text-[11px] text-slate-400 mt-1 italic truncate">{r.notes}</p>}
+                  {r.next_visit && (
+                    <p className={`text-[11px] font-semibold mt-1.5 ${r.next_visit < todayStr ? 'text-rose-500' : 'text-emerald-600'}`}>
+                      Kontrol berikut: {formatDate(r.next_visit)}
+                    </p>
+                  )}
+                </div>
+                <ChevronRight size={15} className="text-slate-300 shrink-0 mt-1 group-hover:text-indigo-400 transition-colors" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Modal Detail ── */}
+      {selected && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setSelected(null)}>
+          <div className="bg-white w-full max-w-md rounded-[28px] shadow-2xl anim-zoom overflow-hidden">
+            {/* Header */}
+            <div className={`px-6 pt-6 pb-5 border-b border-slate-100`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 ${(MEDICAL_TYPE_META[selected.type] || {}).bg || 'bg-slate-50'} rounded-2xl flex items-center justify-center shrink-0`}>
+                    <Stethoscope size={18} className={(MEDICAL_TYPE_META[selected.type] || {}).color || 'text-slate-600'} />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 leading-tight">{selected.title}</h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(MEDICAL_TYPE_META[selected.type] || {}).badge || 'bg-slate-100 text-slate-600'}`}>{selected.type}</span>
+                  </div>
+                </div>
+                <button onClick={() => setSelected(null)} className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 transition-all shrink-0">
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 space-y-3 max-h-[55vh] overflow-y-auto">
+              {/* Info klinik */}
+              <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Informasi Kunjungan</p>
+                {[
+                  ['Tanggal', formatDate(selected.date)],
+                  ['Dokter', selected.doctor || '—'],
+                  ['Klinik', selected.clinic || '—'],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between items-center">
+                    <span className="text-xs text-slate-500">{k}</span>
+                    <span className="text-xs font-bold text-slate-800">{v}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Vital */}
+              {(selected.weight || selected.temp) && (
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Data Vital</p>
+                  {selected.weight && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Berat Badan</span>
+                      <span className="text-xs font-bold text-slate-800">{selected.weight} kg</span>
+                    </div>
+                  )}
+                  {selected.temp && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Suhu Tubuh</span>
+                      <span className="text-xs font-bold text-slate-800">{selected.temp}°C</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Catatan */}
+              {selected.notes && (
+                <div className="bg-slate-50 rounded-2xl p-4">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Catatan</p>
+                  <p className="text-sm text-slate-700 leading-relaxed">{selected.notes}</p>
+                </div>
+              )}
+
+              {/* Kunjungan berikut */}
+              {selected.next_visit && (
+                <div className={`p-4 rounded-2xl flex items-center gap-3 ${selected.next_visit < todayStr ? 'bg-rose-50' : 'bg-emerald-50'}`}>
+                  <Calendar size={16} className={selected.next_visit < todayStr ? 'text-rose-500' : 'text-emerald-500'} />
+                  <div>
+                    <p className={`text-[10px] font-black uppercase tracking-wider mb-0.5 ${selected.next_visit < todayStr ? 'text-rose-400' : 'text-emerald-500'}`}>
+                      {selected.next_visit < todayStr ? 'Kontrol Terlewat' : 'Jadwal Kontrol'}
+                    </p>
+                    <p className={`text-sm font-bold ${selected.next_visit < todayStr ? 'text-rose-700' : 'text-emerald-700'}`}>{formatDate(selected.next_visit)}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6 pt-2">
+              <button onClick={() => setDeleteConfirmId(selected.id)}
+                className="w-full py-3 bg-rose-50 text-rose-600 rounded-2xl font-bold text-sm hover:bg-rose-100 transition-all flex items-center justify-center gap-2">
+                <Trash2 size={14} /> Hapus Catatan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Konfirmasi Hapus ── */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[28px] p-6 max-w-sm w-full shadow-2xl anim-zoom text-center">
+            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 size={22} className="text-rose-500" />
+            </div>
+            <h4 className="font-black text-slate-800 text-lg mb-2">Hapus Catatan?</h4>
+            <p className="text-sm text-slate-500 mb-6">Data rekam medis ini akan dihapus permanen.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all">Batal</button>
+              <button onClick={() => handleDelete(deleteConfirmId)} className="flex-1 py-3 bg-rose-500 text-white rounded-2xl font-bold text-sm hover:bg-rose-600 transition-all">Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Form Tambah ── */}
+      {showForm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="bg-white w-full max-w-md rounded-[28px] shadow-2xl anim-zoom overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center">
+                  <Stethoscope size={16} className="text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800">Catatan Medis Baru</h3>
+                  <p className="text-[11px] text-slate-400">Isi informasi kunjungan</p>
+                </div>
+              </div>
+              <button onClick={() => setShowForm(false)} className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 transition-all">
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdd} className="overflow-y-auto max-h-[70vh]">
+              <div className="px-6 py-5 space-y-5">
+
+                {/* Hewan & Jenis */}
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Hewan & Prosedur</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label-style">Hewan</label>
+                      <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
+                        {pets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label-style">Jenis</label>
+                      <select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="input-style">
+                        {RECORD_TYPES.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label-style">Judul / Nama Prosedur</label>
+                    <input required type="text" placeholder="Contoh: Vaksin rabies, Operasi steril..." value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="input-style" />
+                  </div>
+                  <div>
+                    <label className="label-style">Tanggal</label>
+                    <input required type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="input-style" />
+                  </div>
+                </div>
+
+                {/* Klinik & Dokter */}
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Klinik & Dokter</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label-style">Nama Dokter</label>
+                      <input type="text" placeholder="drh. ..." value={form.doctor} onChange={e => setForm({ ...form, doctor: e.target.value })} className="input-style" />
+                    </div>
+                    <div>
+                      <label className="label-style">Nama Klinik</label>
+                      <input type="text" value={form.clinic} onChange={e => setForm({ ...form, clinic: e.target.value })} className="input-style" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vital */}
+                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Data Vital <span className="text-slate-300 font-normal normal-case">(opsional)</span></p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="label-style">Berat (kg)</label>
+                      <input type="number" step="0.01" placeholder="0.0" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" />
+                    </div>
+                    <div>
+                      <label className="label-style">Suhu (°C)</label>
+                      <input type="number" step="0.1" placeholder="38.5" value={form.temp} onChange={e => setForm({ ...form, temp: e.target.value })} className="input-style" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Catatan & Follow-up */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="label-style">Catatan <span className="text-slate-400 font-normal">(opsional)</span></label>
+                    <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="Hasil pemeriksaan, obat yang diberikan, dll..." className="input-style resize-none" />
+                  </div>
+                  <div>
+                    <label className="label-style">Kunjungan Berikutnya <span className="text-slate-400 font-normal">(opsional)</span></label>
+                    <input type="date" value={form.next_visit} onChange={e => setForm({ ...form, next_visit: e.target.value })} className="input-style" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 pb-6">
+                <button type="submit" disabled={saving}
+                  className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
+                  {saving ? <><Loader2 size={16} className="animate-spin" /> Menyimpan...</> : <><Check size={16} /> Simpan Catatan</>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
   return (
     <div className="anim-slide-up">
@@ -1412,31 +2050,51 @@ const TipsPage = ({ selectedPet, records }) => {
 };
 
 // ─── SETTINGS PAGE ────────────────────────────────────────────────────
-const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet }) => {
+const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet, darkMode, onToggleDark, notifSettings, onSaveNotifSettings }) => {
   const [section, setSection] = useState('profile');
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: profile?.name || '', phone: profile?.phone || '' });
-  const [editPetId, setEditPetId] = useState(null);
-  const [petForm, setPetForm] = useState({});
-  const [notifSettings, setNotifSettings] = useState({ jadwal: true, kesehatan: true, tips: true, vaksinasi: true });
   const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [pushPermission, setPushPermission] = useState(() =>
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
 
   const saveProfile = async () => {
     setSaving(true);
     try { await onUpdateProfile(profileForm); setEditProfile(false); } finally { setSaving(false); }
   };
 
-  const savePet = async () => {
-    setSaving(true);
-    try { await onUpdatePet(editPetId, petForm); setEditPetId(null); } finally { setSaving(false); }
+  const requestPushPermission = async () => {
+    if (!('Notification' in window)) return;
+    const result = await Notification.requestPermission();
+    setPushPermission(result);
   };
 
-  const sections = [
-    { id: 'profile', label: 'Edit Profil', icon: User },
-    { id: 'notifications', label: 'Notifikasi', icon: Bell },
-    { id: 'app', label: 'Tentang', icon: Settings },
+  const toggleNotif = (key) => {
+    onSaveNotifSettings({ ...notifSettings, [key]: !notifSettings[key] });
+  };
+
+  const NOTIF_ITEMS = [
+    { key: 'jadwal',    title: 'Pengingat Jadwal',       desc: 'Push notif & in-app saat jadwal hampir tiba', icon: Calendar },
+    { key: 'kesehatan', title: 'Pemantauan Kesehatan',    desc: 'Alert skor IoT buruk dan kondisi darurat',    icon: HeartPulse },
+    { key: 'vaksinasi', title: 'Vaksinasi & Kontrol',     desc: 'Pengingat jadwal vaksin dari rekam medis',    icon: Syringe },
+    { key: 'tips',      title: 'Tips Harian',             desc: 'Tips perawatan harian berdasarkan hewan',     icon: BookOpen },
   ];
+
+  const sections = [
+    { id: 'profile',       label: 'Edit Profil',  icon: User },
+    { id: 'notifications', label: 'Notifikasi',   icon: Bell },
+    { id: 'tampilan',      label: 'Tampilan',     icon: Settings },
+    { id: 'app',           label: 'Tentang',      icon: Info },
+  ];
+
+  const pushStatusInfo = {
+    granted:     { label: 'Aktif', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+    denied:      { label: 'Diblokir', cls: 'bg-rose-50 text-rose-700', dot: 'bg-rose-500' },
+    default:     { label: 'Belum diizinkan', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-400' },
+    unsupported: { label: 'Tidak didukung', cls: 'bg-slate-100 text-slate-500', dot: 'bg-slate-400' },
+  };
+  const psi = pushStatusInfo[pushPermission] || pushStatusInfo.unsupported;
 
   return (
     <div className="anim-slide-up">
@@ -1454,7 +2112,9 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
           </button>
         </div>
 
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 space-y-4">
+
+          {/* ── PROFIL ── */}
           {section === 'profile' && (
             <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-6">
@@ -1493,24 +2153,136 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             </div>
           )}
 
-
-
+          {/* ── NOTIFIKASI ── */}
           {section === 'notifications' && (
-            <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-              <h4 className="font-bold text-slate-800 mb-5">Pengaturan Notifikasi</h4>
-              <div className="space-y-3">
-                {[['jadwal', 'Pengingat Jadwal', 'Notifikasi kegiatan hewan'], ['kesehatan', 'Pemantauan Kesehatan', 'Update kondisi real-time'], ['tips', 'Tips Harian', 'Tips perawatan setiap hari'], ['vaksinasi', 'Vaksinasi dan Kontrol', 'Pengingat vaksinasi']].map(([k, title, desc]) => (
-                  <div key={k} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                    <div><p className="font-semibold text-slate-800 text-sm">{title}</p><p className="text-xs text-slate-500 mt-0.5">{desc}</p></div>
-                    <button onClick={() => setNotifSettings(prev => ({ ...prev, [k]: !prev[k] }))} className="transition-colors">
-                      {notifSettings[k] ? <ToggleRight size={30} className="text-indigo-600" /> : <ToggleLeft size={30} className="text-slate-300" />}
-                    </button>
+            <div className="space-y-4">
+              {/* Browser Push Permission Card */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                    <Bell size={18} className="text-indigo-500" />
                   </div>
-                ))}
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Notifikasi Push (Browser)</h4>
+                    <p className="text-xs text-slate-500">Izin untuk kirim notifikasi ke perangkat</p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${psi.dot}`} />
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${psi.cls}`}>{psi.label}</span>
+                  </div>
+                </div>
+                {pushPermission === 'default' && (
+                  <button onClick={requestPushPermission}
+                    className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 flex items-center justify-center gap-2">
+                    <Bell size={15} /> Izinkan Notifikasi Push
+                  </button>
+                )}
+                {pushPermission === 'denied' && (
+                  <div className="p-4 bg-rose-50 rounded-2xl text-sm text-rose-700 font-medium">
+                    Notifikasi diblokir oleh browser. Buka <strong>Pengaturan browser → Situs → Notifikasi</strong> untuk mengaktifkan kembali.
+                  </div>
+                )}
+                {pushPermission === 'granted' && (
+                  <div className="p-4 bg-emerald-50 rounded-2xl text-sm text-emerald-700 font-medium flex items-center gap-2">
+                    <CheckCircle2 size={16} /> Notifikasi push aktif — pengingat jadwal akan dikirim otomatis.
+                  </div>
+                )}
+              </div>
+
+              {/* Per-type Toggle Settings */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <h4 className="font-bold text-slate-800 mb-1">Jenis Notifikasi</h4>
+                <p className="text-xs text-slate-500 mb-5">Pilih jenis notifikasi yang ingin diterima. Perubahan langsung tersimpan.</p>
+                <div className="space-y-3">
+                  {NOTIF_ITEMS.map(({ key, title, desc, icon: NIcon }) => (
+                    <div key={key} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${notifSettings[key] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                          <NIcon size={16} />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-800 text-sm">{title}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => toggleNotif(key)} className="transition-colors ml-3 shrink-0">
+                        {notifSettings[key]
+                          ? <ToggleRight size={34} className="text-indigo-600" />
+                          : <ToggleLeft size={34} className="text-slate-300" />
+                        }
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-4 text-center">Pengaturan disimpan otomatis di perangkat ini</p>
               </div>
             </div>
           )}
 
+          {/* ── TAMPILAN (DARK MODE) ── */}
+          {section === 'tampilan' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <h4 className="font-bold text-slate-800 mb-1">Mode Tampilan</h4>
+                <p className="text-xs text-slate-500 mb-5">Pilih tema tampilan aplikasi sesuai preferensi.</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Light mode card */}
+                  <button onClick={() => darkMode && onToggleDark()}
+                    className={`relative p-5 rounded-2xl border-2 text-left transition-all ${!darkMode ? 'border-indigo-500 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
+                    {!darkMode && (
+                      <div className="absolute top-3 right-3 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center">
+                        <CheckCircle2 size={12} className="text-white" />
+                      </div>
+                    )}
+                    <div className="w-full h-16 bg-slate-50 rounded-xl mb-3 border border-slate-100 flex flex-col justify-center px-3 gap-1.5">
+                      <div className="h-2 bg-white rounded-full w-3/4 border border-slate-100" />
+                      <div className="h-1.5 bg-slate-200 rounded-full w-1/2" />
+                    </div>
+                    <p className="font-bold text-slate-800 text-sm">Terang</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Tampilan default putih</p>
+                  </button>
+
+                  {/* Dark mode card */}
+                  <button onClick={() => !darkMode && onToggleDark()}
+                    className={`relative p-5 rounded-2xl border-2 text-left transition-all ${darkMode ? 'border-indigo-500 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
+                    {darkMode && (
+                      <div className="absolute top-3 right-3 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center">
+                        <CheckCircle2 size={12} className="text-white" />
+                      </div>
+                    )}
+                    <div className="w-full h-16 bg-slate-800 rounded-xl mb-3 border border-slate-700 flex flex-col justify-center px-3 gap-1.5">
+                      <div className="h-2 bg-slate-600 rounded-full w-3/4" />
+                      <div className="h-1.5 bg-slate-700 rounded-full w-1/2" />
+                    </div>
+                    <p className="font-bold text-slate-800 text-sm">Gelap</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Ramah mata di malam hari</p>
+                  </button>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${darkMode ? 'bg-slate-700 text-slate-300' : 'bg-amber-50 text-amber-500'}`}>
+                      {darkMode ? <Moon size={16} /> : <Sun size={16} />}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 text-sm">Mode Gelap</p>
+                      <p className="text-xs text-slate-500">{darkMode ? 'Aktif — tampilan gelap digunakan' : 'Nonaktif — tampilan terang digunakan'}</p>
+                    </div>
+                  </div>
+                  <button onClick={onToggleDark} className="transition-colors ml-3 shrink-0">
+                    {darkMode
+                      ? <ToggleRight size={34} className="text-indigo-600" />
+                      : <ToggleLeft size={34} className="text-slate-300" />
+                    }
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-3 text-center">Preferensi disimpan otomatis di perangkat ini</p>
+              </div>
+            </div>
+          )}
+
+          {/* ── TENTANG ── */}
           {section === 'app' && (
             <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
               <h4 className="font-bold text-slate-800 mb-4">Tentang Aplikasi</h4>
@@ -1521,6 +2293,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
               ))}
             </div>
           )}
+
         </div>
       </div>
     </div>
@@ -2038,11 +2811,14 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
                 </thead>
                 <tbody>
                   {[
-                    ['Kucing', '38.1 – 39.2', '120 – 140', '≥ 95'],
-                    ['Anjing', '37.5 – 39.2', '60 – 120', '≥ 95'],
-                    ['Kelinci', '38.5 – 40.0', '120 – 150', '≥ 95'],
-                    ['Hamster', '37.0 – 38.5', '250 – 500', '≥ 95'],
-                    ['Marmut', '37.2 – 39.5', '150 – 250', '≥ 95'],
+                    ['Kucing',        '38.1 – 39.2', '120 – 140', '≥ 95'],
+                    ['Anjing',        '37.5 – 39.2', '60 – 120',  '≥ 95'],
+                    ['Kelinci',       '38.5 – 40.0', '120 – 150', '≥ 95'],
+                    ['Hamster',       '37.0 – 38.5', '250 – 500', '≥ 95'],
+                    ['Marmut',        '37.2 – 39.5', '150 – 250', '≥ 95'],
+                    ['Ferret',        '37.8 – 40.0', '180 – 250', '≥ 95'],
+                    ['Sugar Glider',  '36.0 – 37.5', '200 – 300', '≥ 95'],
+                    ['Landak Mini',   '36.0 – 38.0', '100 – 300', '≥ 95'],
                   ].map(([sp, suhu, hr, spo2], idx) => {
                     const isSelected = selectedPet?.species === sp;
                     return (
@@ -2123,10 +2899,32 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
   const [petLoading, setPetLoading] = useState(false);
+  const [streak, setStreak] = useState(0);
   const notifRef = useRef(null);
 
+  // ── Dark mode ─────────────────────────────────────────────────────────
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('petcare_dark') === 'true');
+  const toggleDark = useCallback(() => {
+    setDarkMode(prev => {
+      const next = !prev;
+      localStorage.setItem('petcare_dark', String(next));
+      return next;
+    });
+  }, []);
+
+  // ── Notification settings (App level so hook + Dashboard can read them) ─
+  const NOTIF_DEFAULTS = { jadwal: true, kesehatan: true, tips: true, vaksinasi: true };
+  const [notifSettings, setNotifSettings] = useState(() => {
+    try { return { ...NOTIF_DEFAULTS, ...JSON.parse(localStorage.getItem('petcare_notif') || '{}') }; }
+    catch { return NOTIF_DEFAULTS; }
+  });
+  const saveNotifSettings = useCallback((updated) => {
+    setNotifSettings(updated);
+    localStorage.setItem('petcare_notif', JSON.stringify(updated));
+  }, []);
+
   // Push notification ke device untuk pengingat jadwal
-  usePushNotifications(schedules, pets);
+  usePushNotifications(schedules, pets, notifSettings);
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
@@ -2151,7 +2949,7 @@ export default function App() {
   // Load all data
   useEffect(() => {
     if (!session) {
-      setPets([]); setSelectedPet(null); setSchedules([]); setRecords([]); setNotifications([]); setProfile(null);
+      setPets([]); setSelectedPet(null); setSchedules([]); setRecords([]); setNotifications([]); setProfile(null); setStreak(0);
       return;
     }
     const uid = session.user.id;
@@ -2164,11 +2962,18 @@ export default function App() {
       notifService.getAll(uid),
     ]).then(([prof, pts, scheds, recs, notifs]) => {
       setProfile(prof);
+      setStreak(prof?.login_streak || 0);
       setPets(pts);
       setSelectedPet(pts[0] || null);
       setSchedules(scheds);
       setRecords(recs);
       setNotifications(notifs);
+      // Update streak harian (hanya Basic)
+      if (prof?.role === 'Basic' || !prof?.role) {
+        profileService.updateStreak(uid)
+          .then(res => { if (res.changed) setStreak(res.streak); })
+          .catch(() => {});
+      }
     }).catch(e => {
       console.error(e);
       showToast('Gagal memuat data dari Supabase', 'error');
@@ -2316,15 +3121,13 @@ export default function App() {
   const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
+    <div data-dark={darkMode ? "true" : undefined} className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 p-5 shrink-0">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-            <HeartPulse size={22} />
-          </div>
+          <img src="/logo.svg" alt="PetCare+" className="w-10 h-10 rounded-xl shadow-md shadow-indigo-200" />
           <h1 className="text-xl font-black tracking-tight text-indigo-900">PetCare<span className="text-indigo-500">+</span></h1>
         </div>
         <nav className="flex-1 space-y-1">
@@ -2346,8 +3149,10 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between z-40 shrink-0">
-          <div className="flex items-center gap-3">
+        <header className="h-16 bg-white border-b border-slate-100 px-4 flex items-center justify-between z-40 shrink-0">
+          <div className="flex items-center gap-2.5">
+            {/* Logo — mobile only (md:hidden replaces it with sidebar) */}
+            <img src="/logo.svg" alt="PetCare+" className="md:hidden w-8 h-8 rounded-lg" />
             <h2 className="text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
             {/* Banner izin push notifikasi — ditampilkan di header agar tidak ganggu konten */}
             {'Notification' in window && Notification.permission === 'default' && (
@@ -2385,11 +3190,11 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-6">
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => addNotif(session.user.id, payload)} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} />}
+              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} />}
-              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} />}
+              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} />}
             </div>
           )}
         </div>

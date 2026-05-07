@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="120" fill="url(#shine)"/>
+
+  <!-- Paw pad (main) -->
+  <ellipse cx="256" cy="310" rx="88" ry="74" fill="white" opacity="0.95"/>
+
+  <!-- Toe beans (4 toes) -->
+  <ellipse cx="156" cy="225" rx="38" ry="46" fill="white" opacity="0.95"/>
+  <ellipse cx="213" cy="188" rx="36" ry="43" fill="white" opacity="0.95"/>
+  <ellipse cx="299" cy="188" rx="36" ry="43" fill="white" opacity="0.95"/>
+  <ellipse cx="356" cy="225" rx="38" ry="46" fill="white" opacity="0.95"/>
+
+  <!-- Heart overlay on main pad -->
+  <path d="M256 348 C256 348 210 316 210 290 C210 272 222 262 238 266 C246 268 252 274 256 280 C260 274 266 268 274 266 C290 262 302 272 302 290 C302 316 256 348 256 348Z" fill="#4f46e5" opacity="0.85"/>
+
+  <!-- Plus sign top-right accent -->
+  <g opacity="0.9">
+    <rect x="368" y="100" width="48" height="14" rx="7" fill="white"/>
+    <rect x="385" y="83" width="14" height="48" rx="7" fill="white"/>
+  </g>
+</svg>

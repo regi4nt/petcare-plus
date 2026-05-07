@@ -66,6 +66,46 @@ export const profileService = {
     if (error) throw error;
     return data;
   },
+
+  // ── Streak: hitung & perbarui streak login harian ─────────────────
+  async updateStreak(userId) {
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data: prof, error: fetchErr } = await supabase
+      .from('profiles')
+      .select('login_streak, last_login_date')
+      .eq('id', userId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const lastDate = prof?.last_login_date;
+
+    // Sudah login hari ini → tidak perlu update
+    if (lastDate === today) {
+      return { streak: prof.login_streak || 1, changed: false };
+    }
+
+    // Hitung streak baru
+    let newStreak = 1;
+    if (lastDate) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      if (lastDate === yesterdayStr) {
+        newStreak = (prof.login_streak || 0) + 1;
+      }
+      // else: lewat lebih dari 1 hari → reset ke 1
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ login_streak: newStreak, last_login_date: today })
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return { streak: newStreak, changed: true, profile: data };
+  },
 };
 
 // ─── PETS ─────────────────────────────────────────────────────────────
