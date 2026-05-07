@@ -3048,25 +3048,9 @@ export default function App() {
     }
   };
 
-  // Render loading screen
-  if (loading) return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-950 via-indigo-900 to-slate-900 flex flex-col items-center justify-center px-8">
-      <div style={{animation:'splashIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both'}}>
-        <img src="/logo.svg" alt="PetCare+" className="w-24 h-24 rounded-3xl shadow-2xl shadow-indigo-900/80 mx-auto mb-6" />
-      </div>
-      <div style={{animation:'splashIn 0.6s 0.15s cubic-bezier(0.34,1.56,0.64,1) both', opacity:0}}>
-        <p className="text-white text-3xl font-black tracking-tight mb-1 text-center">PetCare<span className="text-indigo-400">+</span></p>
-        <p className="text-indigo-300/70 text-sm font-medium text-center">Pemantauan Kesehatan Hewan Pintar</p>
-      </div>
-      <div style={{animation:'splashIn 0.5s 0.4s ease both', opacity:0, marginTop:'48px'}}>
-        <div style={{width:'32px',height:'32px',border:'3px solid rgba(129,140,248,0.2)',borderTopColor:'#818cf8',borderRadius:'50%',animation:'spin 0.9s linear infinite'}} />
-      </div>
-      <style>{`
-        @keyframes splashIn { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-    </div>
-  );
+  // Saat loading, kembalikan null — HTML splash di index.html sudah menangani tampilan awal.
+  // Begitu root terisi (React mulai render), HTML splash otomatis fade-out.
+  if (loading) return null;
 
   // Render auth page if not logged in
   if (!session) return <AuthPage />;
@@ -3078,6 +3062,8 @@ export default function App() {
     { id: 'medical',   icon: FileText,         label: 'Rekam Medis' },
     { id: 'settings',  icon: Settings,         label: 'Pengaturan' },
   ];
+  // Nav khusus mobile — tanpa Pengaturan (akses via avatar/header)
+  const MOBILE_NAV = NAV.filter(n => n.id !== 'settings');
 
   const unreadCount = notifications.filter(n => n.unread).length;
   const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
@@ -3192,18 +3178,27 @@ export default function App() {
           )}
         </div>
 
-        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 py-2 shrink-0">
-          {NAV.map(item => (
+        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-2 pb-2 shrink-0" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))'}}>
+          {/* Split nav: 2 item kiri - spacer FAB - 2 item kanan */}
+          {MOBILE_NAV.slice(0, 2).map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
               className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
               <item.icon size={21} />
             </button>
           ))}
-          {/* FAB Darurat — menempel di atas navbar */}
+          {/* Spacer tengah untuk FAB */}
+          <div className="w-16 shrink-0" />
+          {MOBILE_NAV.slice(2).map(item => (
+            <button key={item.id} onClick={() => handleTabChange(item.id)}
+              className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+              <item.icon size={21} />
+            </button>
+          ))}
+          {/* FAB Darurat — melayang di atas navbar, tidak overlap dengan tombol nav */}
           <button onClick={handlePanggilDokter}
-            className="absolute -top-6 right-4 flex items-center justify-center active:scale-95 transition-transform">
-            <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center shadow-lg shadow-rose-400/50 ring-[3px] ring-white">
-              <Phone size={19} className="text-white" />
+            className="absolute left-1/2 -translate-x-1/2 -top-7 flex items-center justify-center active:scale-95 transition-transform z-10">
+            <div className="w-14 h-14 bg-rose-500 rounded-full flex items-center justify-center shadow-xl shadow-rose-400/60 ring-4 ring-white">
+              <Phone size={22} className="text-white" />
             </div>
           </button>
         </nav>
