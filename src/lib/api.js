@@ -322,6 +322,81 @@ export const monitoringService = {
   },
 
   /**
+   * Ambil riwayat skor kesehatan harian (7 hari terakhir = 6 hari lalu + hari ini).
+   * Data dikelompokkan per hari, dikalkulasi rata-rata vital sign, lalu diberi skor 0-100.
+   * @param {string} petId
+   * @param {number} days - jumlah hari (default: 7)
+   * @returns {Array<{ date, score, reading_count, avg_suhu, avg_hr, avg_spo2 }>}
+   */
+  async getDailyHealth(petId, days = 7) {
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - (days - 1));
+    fromDate.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from('monitoring')
+      .select('suhu, heart_rate, spo2, created_at')
+      .eq('pet_id', petId)
+      .gte('created_at', fromDate.toISOString())
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    // Bangun map untuk setiap hari
+    const dayMap = {};
+    const today = new Date();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (days - 1 - i));
+      const key = d.toISOString().split('T')[0];
+      dayMap[key] = { date: key, readings: [] };
+    }
+
+    // Kelompokkan data per hari
+    (data || []).forEach(row => {
+      const key = (row.created_at || '').split('T')[0];
+      if (dayMap[key]) dayMap[key].readings.push(row);
+    });
+
+    // Kalkulasi skor kesehatan per hari
+    return Object.values(dayMap).map(({ date, readings }) => {
+      if (!readings.length) return { date, score: null, reading_count: 0, avg_suhu: null, avg_hr: null, avg_spo2: null };
+
+      const avg = (field) => {
+        const vals = readings.map(r => parseFloat(r[field])).filter(v => !isNaN(v));
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      };
+
+      const avg_suhu = avg('suhu');
+      const avg_hr   = avg('heart_rate');
+      const avg_spo2 = avg('spo2');
+
+      // Skor kesehatan berbobot: suhu 35%, detak jantung 35%, SpO2 30%
+      let tw = 0, ts = 0;
+      if (avg_suhu != null) {
+        tw += 35;
+        if (avg_suhu >= 37.5 && avg_suhu <= 39.5) ts += 35;
+        else if ((avg_suhu >= 36.0 && avg_suhu < 37.5) || (avg_suhu > 39.5 && avg_suhu <= 41.0)) ts += 20;
+        else ts += 5;
+      }
+      if (avg_hr != null) {
+        tw += 35;
+        if (avg_hr >= 60 && avg_hr <= 140) ts += 35;
+        else if ((avg_hr >= 50 && avg_hr < 60) || (avg_hr > 140 && avg_hr <= 160)) ts += 20;
+        else ts += 5;
+      }
+      if (avg_spo2 != null) {
+        tw += 30;
+        if (avg_spo2 >= 95) ts += 30;
+        else if (avg_spo2 >= 90) ts += 18;
+        else ts += 5;
+      }
+
+      const score = tw > 0 ? Math.round((ts / tw) * 100) : null;
+      return { date, score, reading_count: readings.length, avg_suhu, avg_hr, avg_spo2 };
+    });
+  },
+
+  /**
    * Hapus semua data monitoring untuk pet tertentu.
    * @param {string} petId
    */

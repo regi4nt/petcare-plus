@@ -446,13 +446,45 @@ const AuthPage = () => {
   );
 };
 
+// ─── HEALTH SCORE CALCULATOR ──────────────────────────────────────────
+// Menghitung skor kesehatan 0-100 dari data vital sign IoT.
+// Suhu bobot 35%, detak jantung 35%, SpO2 30%.
+const calculateHealthScore = (suhu, hr, spo2) => {
+  let tw = 0, ts = 0;
+  if (suhu != null) {
+    tw += 35;
+    if (suhu >= 37.5 && suhu <= 39.5) ts += 35;
+    else if ((suhu >= 36.0 && suhu < 37.5) || (suhu > 39.5 && suhu <= 41.0)) ts += 20;
+    else ts += 5;
+  }
+  if (hr != null) {
+    tw += 35;
+    if (hr >= 60 && hr <= 140) ts += 35;
+    else if ((hr >= 50 && hr < 60) || (hr > 140 && hr <= 160)) ts += 20;
+    else ts += 5;
+  }
+  if (spo2 != null) {
+    tw += 30;
+    if (spo2 >= 95) ts += 30;
+    else if (spo2 >= 90) ts += 18;
+    else ts += 5;
+  }
+  return tw > 0 ? Math.round((ts / tw) * 100) : null;
+};
+
+const getHealthLabel = (score) => {
+  if (score == null) return { label: 'Belum ada data IoT', emoji: '📡', cls: 'bg-slate-100 text-slate-500', barCls: 'bg-slate-300', ring: 'ring-slate-200' };
+  if (score >= 85) return { label: 'Sehat', emoji: '✅', cls: 'bg-emerald-100 text-emerald-700', barCls: 'bg-emerald-500', ring: 'ring-emerald-200' };
+  if (score >= 65) return { label: 'Perlu Perhatian', emoji: '⚠️', cls: 'bg-amber-100 text-amber-700', barCls: 'bg-amber-500', ring: 'ring-amber-200' };
+  return { label: 'Butuh Pemeriksaan', emoji: '🚨', cls: 'bg-rose-100 text-rose-700', barCls: 'bg-rose-500', ring: 'ring-rose-200' };
+};
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────
 const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records }) => {
-  // Dashboard menggunakan data TERKALKULASI (rata-rata dari N pembacaan IoT),
-  // bukan data raw langsung. Data raw tersedia di halaman Monitor IoT.
-  const [iotCalc, setIotCalc]     = useState(null);
-  const [iotLoading, setIotLoading] = useState(false);
-  const [tempUnit, setTempUnit]   = useState('C'); // 'C' | 'F' | 'K'
+  const [iotCalc, setIotCalc]         = useState(null);
+  const [dailyHealth, setDailyHealth] = useState([]);
+  const [iotLoading, setIotLoading]   = useState(false);
+  const [tempUnit, setTempUnit]       = useState('C'); // 'C' | 'F' | 'K'
 
   // ── Konversi suhu ─────────────────────────────────────────────────
   const convertTemp = (celsius, unit) => {
@@ -468,14 +500,18 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     return converted != null ? converted.toFixed(1) : null;
   };
 
-  const fetchCalculated = async (petId) => {
+  const fetchAllIot = async (petId) => {
     if (!petId) return;
     setIotLoading(true);
     try {
-      const calc = await monitoringService.getCalculated(petId, 20);
+      const [calc, daily] = await Promise.all([
+        monitoringService.getCalculated(petId, 20),
+        monitoringService.getDailyHealth(petId, 7),
+      ]);
       setIotCalc(calc);
+      setDailyHealth(daily || []);
     } catch (e) {
-      console.error('Dashboard calc error', e);
+      console.error('Dashboard IoT error', e);
     } finally {
       setIotLoading(false);
     }
@@ -483,11 +519,11 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
 
   useEffect(() => {
     if (!selectedPet?.id) return;
-    fetchCalculated(selectedPet.id);
+    fetchAllIot(selectedPet.id);
 
-    // Saat ada data IoT baru masuk (realtime), re-kalkulasi data dashboard
+    // Realtime: re-fetch kalkulasi saat ada data IoT baru
     const channel = monitoringService.subscribe(selectedPet.id, () => {
-      fetchCalculated(selectedPet.id);
+      fetchAllIot(selectedPet.id);
     });
     return () => { channel.unsubscribe(); };
   }, [selectedPet?.id]);
@@ -516,15 +552,11 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   const hrSt   = getHRStatus(iotCalc?.avg_heart_rate);
   const spo2St = getSpO2Status(iotCalc?.avg_spo2);
 
-  // ── Kesimpulan kondisi keseluruhan (dari data kalkulasi) ──────────
-  const getOverallStatus = () => {
-    if (!iotCalc) return { label: 'Belum ada data IoT', cls: 'bg-slate-100 text-slate-500' };
-    const abnormal = [suhuSt, hrSt, spo2St].filter(s => s.label === 'Tinggi' || s.label === 'Rendah').length;
-    if (abnormal === 0) return { label: 'Kondisi Sehat ✓', cls: 'bg-emerald-100 text-emerald-700' };
-    if (abnormal === 1) return { label: 'Perlu Perhatian', cls: 'bg-amber-100 text-amber-700' };
-    return { label: 'Butuh Pemeriksaan', cls: 'bg-rose-100 text-rose-700' };
-  };
-  const overall = getOverallStatus();
+  // Skor kesehatan terkalkulasi dari data IoT
+  const healthScore = iotCalc
+    ? calculateHealthScore(iotCalc.avg_suhu, iotCalc.avg_heart_rate, iotCalc.avg_spo2)
+    : null;
+  const healthInfo  = getHealthLabel(healthScore);
 
   // ── Stats dari data kalkulasi IoT (rata-rata N pembacaan terakhir) ─
   const fmt = (v, digits = 1) => v != null ? parseFloat(v).toFixed(digits) : null;
@@ -583,20 +615,16 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     })(),
   ];
 
-  // ── Bar chart dari history akselerasi IoT (proxy aktivitas) ───────
-  const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-  const todayIdx = (new Date().getDay() + 6) % 7;
-  const axHistory = iotCalc?.ax_history || [];
-  const bars = axHistory.length >= 2
-    ? (() => {
-        const axVals = axHistory.map(v => Math.abs(parseFloat(v) || 0));
-        const maxAx = Math.max(...axVals) || 1;
-        return axVals.map(v => Math.round((v / maxAx) * 100));
-      })()
-    : [50, 80, 45, 95, 60, 75, 85];
-  const barLabels = axHistory.length >= 2
-    ? axHistory.map((_, i) => `#${i + 1}`)
-    : days;
+  // ── Data grafik kesehatan 7 hari ────────────────────────────────
+  const DAY_LABELS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  const hasRealChartData = dailyHealth.some(d => d.score != null);
+  const chartDays = dailyHealth.length > 0
+    ? dailyHealth.map((d, i) => {
+        const dateObj = new Date(d.date + 'T12:00:00');
+        const isToday = i === dailyHealth.length - 1;
+        return { label: isToday ? 'Hari ini' : DAY_LABELS_ID[dateObj.getDay()], score: d.score, count: d.reading_count, isToday };
+      })
+    : DAY_LABELS_ID.map((l, i) => ({ label: l, score: null, count: 0, isToday: i === 6 }));
 
   if (!selectedPet) return (
     <div className="text-center py-20 text-slate-400">
@@ -614,60 +642,69 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   const TipIcon = tip.icon;
 
   return (
-    <div className="space-y-8 anim-slide-up">
+    <div className="space-y-6 anim-slide-up">
+
+      {/* ── Pet Selector ── */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            Daftar Anabul <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full">{pets.length}</span>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
+            Hewan Peliharaan
+            <span className="bg-indigo-100 text-indigo-600 text-[10px] font-black px-2 py-0.5 rounded-full">{pets.length}</span>
           </h3>
-          <button onClick={onAddPet} className="flex items-center gap-1.5 text-xs bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all">
-            <Plus size={13} /> Tambah
+          <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
+            <Plus size={12} /> Tambah
           </button>
         </div>
-        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-          {pets.map(pet => (
-            <button key={pet.id} onClick={() => setSelectedPet(pet)}
-              className={`flex items-center gap-3 min-w-[200px] p-4 rounded-3xl border-2 transition-all duration-200 bg-white ${selectedPet.id === pet.id ? 'border-indigo-500 shadow-xl -translate-y-1' : 'border-transparent hover:border-slate-200 hover:shadow-md'}`}>
-              <PetAvatar species={pet.species} size="md" />
-              <div className="text-left overflow-hidden">
-                <p className="font-bold text-slate-800 truncate">{pet.name}</p>
-                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{pet.species} · {pet.breed}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{formatAge(pet.age, pet.age_unit)} · {formatWeight(pet.weight)} kg</p>
-              </div>
-            </button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {pets.map(pet => {
+            const PetIcon = PET_ICONS[pet.species] || Cat;
+            const col = PET_COLORS[pet.species] || PET_COLORS['Kucing'];
+            const active = selectedPet.id === pet.id;
+            return (
+              <button key={pet.id} onClick={() => setSelectedPet(pet)}
+                className={`flex items-center gap-2.5 shrink-0 px-3.5 py-2.5 rounded-2xl border-2 transition-all duration-200 ${active ? 'border-indigo-500 bg-indigo-50 shadow-md' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}>
+                <div className={`w-8 h-8 ${col.bg} rounded-xl flex items-center justify-center shrink-0`}>
+                  <PetIcon size={16} className={col.text} />
+                </div>
+                <div className="text-left">
+                  <p className={`text-sm font-bold leading-none ${active ? 'text-indigo-700' : 'text-slate-700'}`}>{pet.name}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{pet.species}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Banner kesimpulan kondisi IoT */}
-          <div className={`flex items-center justify-between px-5 py-3.5 rounded-2xl border ${
-            overall.cls.includes('emerald') ? 'bg-emerald-50 border-emerald-100' :
-            overall.cls.includes('amber') ? 'bg-amber-50 border-amber-100' :
-            overall.cls.includes('rose') ? 'bg-rose-50 border-rose-100' :
-            'bg-slate-50 border-slate-100'
-          }`}>
-            <div className="flex items-center gap-2.5">
-              <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${overall.cls}`}>
-                <Activity size={14} />
-              </div>
-              <div>
-                <span className={`text-sm font-black ${overall.cls.replace('bg-', 'text-').replace('-100', '-700').replace('-50', '-700')}`}>
-                  {overall.label}
-                </span>
-                {iotCalc && (
-                  <span className="text-[10px] text-slate-400 font-semibold ml-2">
-                    dari {iotCalc.reading_count} pembacaan IoT
-                  </span>
-                )}
-              </div>
+        <div className="lg:col-span-2 space-y-5">
+
+          {/* ── Health Score Card ── */}
+          <div className={`rounded-3xl p-5 border flex items-center gap-4 ${healthInfo.cls.includes('emerald') ? 'bg-emerald-50 border-emerald-100' : healthInfo.cls.includes('amber') ? 'bg-amber-50 border-amber-100' : healthInfo.cls.includes('rose') ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+            <div className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center shrink-0 ring-4 ${healthInfo.ring} ${healthInfo.cls}`}>
+              {iotLoading
+                ? <Loader2 size={22} className="animate-spin opacity-60" />
+                : healthScore != null
+                  ? <><span className="text-2xl font-black leading-none">{healthScore}</span><span className="text-[9px] font-bold opacity-70 mt-0.5">/ 100</span></>
+                  : <span className="text-2xl opacity-40">--</span>
+              }
             </div>
-            {!iotCalc && (
-              <span className="text-[10px] text-slate-400 font-semibold">Hubungkan IoT untuk data real-time</span>
-            )}
+            <div className="flex-1 min-w-0">
+              <span className="text-lg font-black text-slate-800">{healthInfo.emoji} {healthInfo.label}</span>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {iotCalc ? `Kalkulasi dari ${iotCalc.reading_count} pembacaan IoT · Suhu, detak jantung & SpO₂` : 'Hubungkan perangkat IoT untuk skor kesehatan real-time'}
+              </p>
+              {iotCalc && (
+                <div className="flex gap-3 mt-2 flex-wrap">
+                  <span className={`text-[10px] font-bold ${suhuSt.cls}`}>🌡 {iotCalc.avg_suhu != null ? `${parseFloat(iotCalc.avg_suhu).toFixed(1)}°C` : '--'} {suhuSt.label}</span>
+                  <span className={`text-[10px] font-bold ${hrSt.cls}`}>💓 {iotCalc.avg_heart_rate != null ? `${Math.round(iotCalc.avg_heart_rate)} bpm` : '--'} {hrSt.label}</span>
+                  <span className={`text-[10px] font-bold ${spo2St.cls}`}>🫁 {iotCalc.avg_spo2 != null ? `${parseFloat(iotCalc.avg_spo2).toFixed(1)}%` : '--'} {spo2St.label}</span>
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* ── Stat Cards ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {stats.map((st, i) => (
               <div key={i} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
@@ -686,110 +723,63 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
                 </div>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">{st.label}</p>
                 <p className="text-2xl font-black text-slate-800 leading-none">
-                  {iotLoading
-                    ? <span className="text-slate-300 text-base">···</span>
-                    : st.value != null
-                      ? <>{st.value}<span className="text-xs font-semibold text-slate-400 ml-0.5">{st.unit}</span></>
-                      : <span className="text-slate-300 text-base">--</span>
-                  }
+                  {iotLoading ? <span className="text-slate-300 text-base">···</span> : st.value != null ? <>{st.value}<span className="text-xs font-semibold text-slate-400 ml-0.5">{st.unit}</span></> : <span className="text-slate-300 text-base">--</span>}
                 </p>
                 <span className={`text-[10px] font-bold mt-1.5 block ${st.statusCls}`}>{st.status}</span>
               </div>
             ))}
           </div>
 
-          {/* ── Grafik Kesehatan Harian ── */}
+          {/* ── Grafik Skor Kesehatan 7 Hari ── */}
           <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-start mb-5">
               <div>
                 <h4 className="font-bold text-slate-800 flex items-center gap-2">
                   <Activity size={15} className="text-indigo-500" />
-                  Grafik Kesehatan Harian
+                  Riwayat Skor Kesehatan
                 </h4>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {axHistory.length >= 2
-                    ? `Intensitas aktivitas fisik dari ${axHistory.length} pembacaan IoT · ${selectedPet.name}`
-                    : `Estimasi kondisi fisik harian · ${selectedPet.name}`}
+                  {hasRealChartData ? `Kalkulasi skor per hari · ${selectedPet.name}` : 'Belum ada data IoT — hubungkan ESP32'}
                 </p>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-500 inline-block" />Aktif</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-400 inline-block" />Normal</span>
-                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-slate-200 inline-block" />Istirahat</span>
+              <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 shrink-0">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500 inline-block"/>≥85</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400 inline-block"/>65–84</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-rose-400 inline-block"/>&lt;65</span>
+              </div>
+            </div>
+            <div className="relative" style={{ height: 160 }}>
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute w-full border-t border-dashed border-emerald-100" style={{ top: '15%' }}>
+                  <span className="absolute right-0 text-[8px] text-emerald-400 font-bold -translate-y-full">85</span>
+                </div>
+                <div className="absolute w-full border-t border-dashed border-amber-100" style={{ top: '35%' }}>
+                  <span className="absolute right-0 text-[8px] text-amber-400 font-bold -translate-y-full">65</span>
                 </div>
               </div>
-            </div>
-
-            {/* Zone labels */}
-            <div className="relative mb-2">
-              <div className="flex justify-between text-[9px] font-bold text-slate-300 uppercase tracking-wide">
-                <span>Istirahat</span><span>Normal</span><span>Aktif</span>
-              </div>
-            </div>
-
-            {/* Chart area */}
-            <div className="relative" style={{ height: 160 }}>
-              {/* Zone background bands */}
-              <div className="absolute inset-0 flex flex-col rounded-xl overflow-hidden pointer-events-none">
-                <div className="flex-1 bg-indigo-50/40" />      {/* Aktif zone (top 33%) */}
-                <div className="flex-1 bg-emerald-50/40" />     {/* Normal zone (mid 33%) */}
-                <div className="flex-1 bg-slate-50/60" />       {/* Istirahat zone (bottom 33%) */}
-              </div>
-
-              {/* Zone dividers */}
-              <div className="absolute inset-x-0 pointer-events-none" style={{ top: '33%' }}>
-                <div className="border-t border-dashed border-indigo-100 w-full" />
-              </div>
-              <div className="absolute inset-x-0 pointer-events-none" style={{ top: '66%' }}>
-                <div className="border-t border-dashed border-emerald-100 w-full" />
-              </div>
-
-              {/* Bars */}
-              <div className="absolute inset-0 flex items-end justify-between gap-1.5 px-1 pb-0">
-                {bars.map((h, i) => {
-                  const isHighlight = axHistory.length >= 2 ? i === bars.length - 1 : i === todayIdx;
-                  const barColor = h >= 67
-                    ? (isHighlight ? 'bg-indigo-600' : 'bg-indigo-300')
-                    : h >= 34
-                    ? (isHighlight ? 'bg-emerald-500' : 'bg-emerald-300')
-                    : (isHighlight ? 'bg-slate-500' : 'bg-slate-300');
+              <div className="absolute inset-0 flex items-end justify-between gap-1.5 px-0.5">
+                {chartDays.map((d, i) => {
+                  const heightPct = d.score != null ? Math.max(6, d.score) : 0;
+                  const barCls = d.score == null ? 'bg-slate-100' : d.score >= 85 ? (d.isToday ? 'bg-emerald-500' : 'bg-emerald-300') : d.score >= 65 ? (d.isToday ? 'bg-amber-500' : 'bg-amber-300') : (d.isToday ? 'bg-rose-500' : 'bg-rose-300');
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1 group" style={{ height: '100%' }}>
-                      <div className="w-full flex flex-col justify-end" style={{ height: 'calc(100% - 16px)' }}>
-                        <div
-                          className={`w-full rounded-t-xl transition-all duration-500 ${barColor} ${isHighlight ? 'shadow-sm' : 'group-hover:opacity-80'}`}
-                          style={{ height: `${Math.max(6, h)}%` }}
-                        />
+                    <div key={i} className="flex-1 flex flex-col items-center gap-0.5" style={{ height: '100%' }}>
+                      <div className="w-full flex flex-col justify-end" style={{ height: 'calc(100% - 28px)' }}>
+                        {d.score != null && <span className={`text-[9px] font-black text-center mb-0.5 ${d.isToday ? 'text-slate-700' : 'text-slate-400'}`}>{d.score}</span>}
+                        <div className={`w-full rounded-t-xl transition-all duration-700 ${barCls}`} style={{ height: d.score != null ? `${heightPct}%` : '8%', opacity: d.score == null ? 0.25 : 1 }} />
                       </div>
-                      <span className={`text-[9px] font-bold leading-none ${isHighlight ? 'text-indigo-600' : 'text-slate-400'}`}>
-                        {barLabels[i]}
-                      </span>
+                      <span className={`text-[9px] font-bold leading-none ${d.isToday ? 'text-indigo-600' : 'text-slate-400'}`}>{d.label}</span>
+                      {d.count > 0 && <span className="text-[8px] text-slate-300 leading-none">{d.count}x</span>}
                     </div>
                   );
                 })}
               </div>
             </div>
-
-            {/* Summary footer */}
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-50">
-              <div className="flex items-center gap-3">
-                {(() => {
-                  const avgBar = bars.reduce((a, b) => a + b, 0) / bars.length;
-                  const actLabel = avgBar >= 67 ? { text: 'Aktif', cls: 'text-indigo-600 bg-indigo-50' }
-                    : avgBar >= 34 ? { text: 'Normal', cls: 'text-emerald-600 bg-emerald-50' }
-                    : { text: 'Kurang Aktif', cls: 'text-slate-500 bg-slate-100' };
-                  return (
-                    <>
-                      <span className={`text-[10px] font-black px-3 py-1 rounded-full ${actLabel.cls}`}>{actLabel.text}</span>
-                      <span className="text-xs text-slate-400">Rata-rata intensitas {Math.round(bars.reduce((a,b)=>a+b,0)/bars.length)}%</span>
-                    </>
-                  );
-                })()}
-              </div>
-              <span className="text-[10px] text-slate-300 font-semibold">
-                {axHistory.length >= 2 ? 'Data IoT' : 'Estimasi'}
-              </span>
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
+              {healthScore != null
+                ? <div className="flex items-center gap-2"><span className={`text-[10px] font-black px-3 py-1 rounded-full ${healthInfo.cls}`}>{healthInfo.label}</span><span className="text-xs text-slate-400">Skor hari ini: {healthScore}/100</span></div>
+                : <span className="text-xs text-slate-400">Belum ada data IoT hari ini</span>
+              }
+              <span className="text-[10px] text-slate-300 font-semibold">6 hari + hari ini</span>
             </div>
           </div>
         </div>
@@ -800,11 +790,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             const TIcon = tip.icon;
             const isUrgent = tip.priority === 'urgent';
             const isHigh = tip.priority === 'high';
-            const cardCls = isUrgent
-              ? 'from-rose-500 to-rose-700'
-              : isHigh
-              ? 'from-amber-500 to-orange-600'
-              : 'from-indigo-500 to-violet-600';
+            const cardCls = isUrgent ? 'from-rose-500 to-rose-700' : isHigh ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-violet-600';
             const badgeLabel = isUrgent ? 'Segera Tindak' : isHigh ? 'Perhatian' : tip.priority ? 'Rekomendasi' : 'Tips Hari Ini';
             const badgeSrc = tip.priority ? 'Dari Rekam Medis' : selectedPet.species;
             return (
@@ -812,9 +798,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
                 <div className="relative z-10">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center">
-                        <TIcon size={15} />
-                      </div>
+                      <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center"><TIcon size={15} /></div>
                       <span className="text-[10px] font-black uppercase tracking-widest opacity-80">{badgeLabel}</span>
                     </div>
                     <span className="text-[9px] font-bold bg-white/20 px-2 py-1 rounded-full opacity-80">{badgeSrc}</span>
@@ -1591,19 +1575,21 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
     <div className="space-y-6 anim-slide-up">
 
       {/* Pet Selector */}
-      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {pets.map(pet => {
           const Icon = PET_ICONS[pet.species] || Cat;
           const col  = PET_COLORS[pet.species] || PET_COLORS["Kucing"];
           const active = selectedPet?.id === pet.id;
           return (
             <button key={pet.id} onClick={() => setSelectedPet(pet)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border-2 transition-all shrink-0 font-semibold text-sm
-                ${active ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-slate-100 bg-white text-slate-500 hover:border-slate-300"}`}>
-              <div className={`w-7 h-7 ${col.bg} rounded-xl flex items-center justify-center`}>
-                <Icon size={14} className={col.text} />
+              className={`flex items-center gap-2.5 shrink-0 px-3.5 py-2.5 rounded-2xl border-2 transition-all duration-200 ${active ? "border-indigo-500 bg-indigo-50 shadow-md" : "border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm"}`}>
+              <div className={`w-8 h-8 ${col.bg} rounded-xl flex items-center justify-center shrink-0`}>
+                <Icon size={16} className={col.text} />
               </div>
-              {pet.name}
+              <div className="text-left">
+                <p className={`text-sm font-bold leading-none ${active ? "text-indigo-700" : "text-slate-700"}`}>{pet.name}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{pet.species}</p>
+              </div>
             </button>
           );
         })}
