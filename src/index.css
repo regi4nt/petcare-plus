@@ -316,5 +316,11 @@ body {
 
 /* ── Fix: modal backdrop doesn't need dark override (it's transparent) ── */
 
+/* ── FAB ring color in dark mode ── */
+[data-dark="true"] .ring-white { --tw-ring-color: #172032 !important; }
+
+/* ── Portal dark wrapper - no layout impact ── */
+[data-dark="true"]:not([class]) { display: contents; }
+
 /* ── Health score ring colors ── */
 [data-dark="true"] .ring-slate-200 { --tw-ring-color: #263347 !important; }

@@ -358,8 +358,9 @@ const Toast = ({ message, type = 'success', onClose }) => {
 
 const Spinner = ({ text = 'Memuat...' }) => (
   <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-    <Loader2 size={32} className="animate-spin mb-3 text-indigo-400" />
+    <div style={{width:'32px',height:'32px',border:'3px solid transparent',borderTopColor:'#818cf8',borderRadius:'50%',animation:'spin 0.8s linear infinite',marginBottom:'12px'}} />
     <p className="text-sm font-medium">{text}</p>
+    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
   </div>
 );
 
@@ -1509,7 +1510,7 @@ const generateRecurrenceDates = (startDate, recurrence) => {
 
 const BLANK_SCHED = (pets) => ({ pet_id: pets[0]?.id || '', type: 'Makan', title: '', date: todayStr, time: '08:00', notes: '', recurrence: 'Sekali' });
 
-const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
+const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete, darkMode }) => {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('all');
@@ -1610,6 +1611,7 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
 
       {/* ── Modal Tambah Jadwal ── */}
       {showForm && createPortal(
+        <div data-dark={darkMode ? "true" : undefined}>
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
@@ -1683,6 +1685,7 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
             </form>
           </div>
         </div>
+        </div>
       , document.body)}
     </div>
   );
@@ -1700,7 +1703,7 @@ const MEDICAL_TYPE_META = {
 
 const BLANK_RECORD = (pets) => ({ pet_id: pets[0]?.id || '', date: todayStr, type: 'Pemeriksaan', title: '', doctor: '', clinic: '', weight: '', temp: '', notes: '', next_visit: '' });
 
-const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
+const MedicalPage = ({ pets, records, onAdd, onDelete, darkMode }) => {
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
@@ -1887,6 +1890,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
 
       {/* ── Modal Form Tambah ── */}
       {showForm && createPortal(
+        <div data-dark={darkMode ? "true" : undefined}>
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
@@ -1955,6 +1959,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
               </button>
             </form>
           </div>
+        </div>
         </div>
       , document.body)}
     </div>
@@ -3043,6 +3048,26 @@ export default function App() {
     }
   };
 
+  // Render loading screen
+  if (loading) return (
+    <div className="min-h-screen bg-gradient-to-b from-indigo-950 via-indigo-900 to-slate-900 flex flex-col items-center justify-center px-8">
+      <div style={{animation:'splashIn 0.6s cubic-bezier(0.34,1.56,0.64,1) both'}}>
+        <img src="/logo.svg" alt="PetCare+" className="w-24 h-24 rounded-3xl shadow-2xl shadow-indigo-900/80 mx-auto mb-6" />
+      </div>
+      <div style={{animation:'splashIn 0.6s 0.15s cubic-bezier(0.34,1.56,0.64,1) both', opacity:0}}>
+        <p className="text-white text-3xl font-black tracking-tight mb-1 text-center">PetCare<span className="text-indigo-400">+</span></p>
+        <p className="text-indigo-300/70 text-sm font-medium text-center">Pemantauan Kesehatan Hewan Pintar</p>
+      </div>
+      <div style={{animation:'splashIn 0.5s 0.4s ease both', opacity:0, marginTop:'48px'}}>
+        <div style={{width:'32px',height:'32px',border:'3px solid rgba(129,140,248,0.2)',borderTopColor:'#818cf8',borderRadius:'50%',animation:'spin 0.9s linear infinite'}} />
+      </div>
+      <style>{`
+        @keyframes splashIn { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
+  );
+
   // Render auth page if not logged in
   if (!session) return <AuthPage />;
 
@@ -3160,8 +3185,8 @@ export default function App() {
             <div className="max-w-6xl mx-auto">
               {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
-              {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} />}
-              {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} />}
+              {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
+              {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
               {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} />}
             </div>
           )}
@@ -3174,11 +3199,11 @@ export default function App() {
               <item.icon size={21} />
             </button>
           ))}
-          {/* FAB Darurat — melayang di atas kanan navbar */}
+          {/* FAB Darurat — menempel di atas navbar */}
           <button onClick={handlePanggilDokter}
-            className="absolute -top-7 right-4 -translate-y-full flex items-center justify-center active:scale-95 transition-transform">
-            <div className="w-14 h-14 bg-rose-500 rounded-full flex items-center justify-center shadow-xl shadow-rose-400/50 ring-4 ring-white">
-              <Phone size={22} className="text-white" />
+            className="absolute -top-6 right-4 flex items-center justify-center active:scale-95 transition-transform">
+            <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center shadow-lg shadow-rose-400/50 ring-[3px] ring-white">
+              <Phone size={19} className="text-white" />
             </div>
           </button>
         </nav>
