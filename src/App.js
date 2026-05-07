@@ -120,12 +120,13 @@ const timeAgo = (ts) => {
 
 const isToday = (str) => str === todayStr;
 
-// Format usia: tampilkan gabungan nilai dan satuan dalam satu string
+// Format usia: satu kolom input — bulat = tahun, ada koma/titik = minggu
 const formatAge = (age, unit) => {
   if (age == null || age === '') return '-';
-  const val = parseFloat(age);
+  const normalized = String(age).replace(',', '.');
+  const val = parseFloat(normalized);
   if (isNaN(val)) return '-';
-  const display = val % 1 === 0 ? val : val.toFixed(1);
+  const display = val % 1 === 0 ? val : val.toFixed(1).replace('.', ',');
   if (unit === 'minggu') return `${display} minggu`;
   return `${display} tahun`;
 };
@@ -480,12 +481,75 @@ const getHealthLabel = (score) => {
   return { label: 'Butuh Pemeriksaan', emoji: '🚨', cls: 'bg-rose-100 text-rose-700', barCls: 'bg-rose-500', ring: 'ring-rose-200' };
 };
 
+// ─── IoT HEALTH ALERT TIPS ────────────────────────────────────────────
+// Tips khusus yang muncul di dashboard saat kondisi hewan bermasalah berdasarkan data IoT
+const getIotHealthTip = (score, iotCalc, petName) => {
+  if (score == null || score >= 65) return null;
+
+  const suhu = iotCalc?.avg_suhu != null ? parseFloat(iotCalc.avg_suhu) : null;
+  const hr   = iotCalc?.avg_heart_rate != null ? parseFloat(iotCalc.avg_heart_rate) : null;
+  const spo2 = iotCalc?.avg_spo2 != null ? parseFloat(iotCalc.avg_spo2) : null;
+
+  // Kumpulkan masalah spesifik dari tiap sensor
+  const issues = [];
+  if (suhu != null && suhu < 37.5) issues.push({ param: 'Suhu', detail: `${suhu.toFixed(1)}°C — di bawah normal (37.5–39.5°C)`, icon: Thermometer });
+  if (suhu != null && suhu > 39.5) issues.push({ param: 'Suhu', detail: `${suhu.toFixed(1)}°C — di atas normal (37.5–39.5°C)`, icon: Thermometer });
+  if (hr != null && hr < 60)  issues.push({ param: 'Detak Jantung', detail: `${Math.round(hr)} BPM — terlalu lambat (normal 60–140 BPM)`, icon: HeartPulse });
+  if (hr != null && hr > 140) issues.push({ param: 'Detak Jantung', detail: `${Math.round(hr)} BPM — terlalu cepat (normal 60–140 BPM)`, icon: HeartPulse });
+  if (spo2 != null && spo2 < 95) issues.push({ param: 'Saturasi O₂', detail: `${spo2.toFixed(1)}% — di bawah batas aman (≥95%)`, icon: Activity });
+
+  if (issues.length === 0) return null;
+
+  const isEmergency = score < 40;
+  const mainIssue = issues[0];
+
+  const tipsMap = {
+    'Suhu-low': {
+      title: `Suhu ${petName} Terlalu Rendah`,
+      body: `Pindahkan ke tempat hangat, jauhkan dari angin/AC. Selimuti dengan kain lembut. Jika tidak membaik dalam 30 menit, segera hubungi dokter hewan.`,
+    },
+    'Suhu-high': {
+      title: `Suhu ${petName} Terlalu Tinggi`,
+      body: `Pindahkan ke ruangan sejuk ber-AC. Kompres dengan kain basah di telapak kaki. Pastikan air minum tersedia. Segera ke klinik jika suhu di atas 41°C.`,
+    },
+    'Detak Jantung-low': {
+      title: `Detak Jantung ${petName} Lemah`,
+      body: `Bisa tanda kelelahan, dehidrasi, atau kondisi jantung. Tenangkan hewan, pastikan tidak stres. Pantau 15 menit — jika tidak membaik langsung ke dokter.`,
+    },
+    'Detak Jantung-high': {
+      title: `Detak Jantung ${petName} Terlalu Cepat`,
+      body: `Bisa disebabkan stres, demam, atau nyeri. Tenangkan hewan di tempat tenang dan gelap. Hindari aktivitas berlebihan. Segera periksa ke dokter hewan.`,
+    },
+    'Saturasi O₂-low': {
+      title: `Saturasi Oksigen ${petName} Rendah`,
+      body: `SpO₂ di bawah 95% bisa mengindikasikan masalah pernapasan. Bawa ke ruangan bersirkulasi udara baik. INI KONDISI DARURAT — segera hubungi dokter hewan.`,
+    },
+  };
+
+  const key = `${mainIssue.param}-${suhu != null && suhu < 37.5 ? 'low' : suhu != null && suhu > 39.5 ? 'high' : hr != null && hr < 60 ? 'low' : hr != null && hr > 140 ? 'high' : 'low'}`;
+  const tipContent = tipsMap[key] || {
+    title: `Kondisi ${petName} Perlu Perhatian`,
+    body: `Skor kesehatan IoT: ${score}/100. Pantau kondisi hewan dan segera konsultasikan ke dokter hewan jika ada perubahan perilaku.`,
+  };
+
+  return {
+    title: tipContent.title,
+    body: tipContent.body,
+    icon: mainIssue.icon,
+    priority: isEmergency ? 'urgent' : 'high',
+    source: 'iot-health',
+    issues,
+  };
+};
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────
-const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records }) => {
+const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records, onAlert }) => {
   const [iotCalc, setIotCalc]         = useState(null);
   const [dailyHealth, setDailyHealth] = useState([]);
   const [iotLoading, setIotLoading]   = useState(false);
   const [tempUnit, setTempUnit]       = useState('C'); // 'C' | 'F' | 'K'
+  const [iotHealthTip, setIotHealthTip] = useState(null); // tip override dari kondisi IoT
+  const alertedScoreRef = useRef(null); // simpan skor terakhir yang sudah dinotif agar tidak spam
 
   // ── Konversi suhu ─────────────────────────────────────────────────
   const convertTemp = (celsius, unit) => {
@@ -511,6 +575,35 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
       ]);
       setIotCalc(calc);
       setDailyHealth(daily || []);
+
+      // ── Cek kondisi kesehatan dari data IoT ──────────────────────
+      if (calc) {
+        const score = calculateHealthScore(calc.avg_suhu, calc.avg_heart_rate, calc.avg_spo2);
+        const pet   = pets.find(p => p.id === petId) || selectedPet;
+
+        // Hanya notif jika skor bermasalah DAN belum pernah notif skor ini
+        if (score != null && score < 65 && alertedScoreRef.current !== score) {
+          alertedScoreRef.current = score;
+          const iotTip = getIotHealthTip(score, calc, pet?.name || 'Hewan');
+          setIotHealthTip(iotTip);
+          if (onAlert && pet) {
+            const isEmergency = score < 40;
+            onAlert({
+              text: isEmergency
+                ? `🚨 DARURAT: ${pet.name} butuh pemeriksaan segera! Skor kesehatan IoT: ${score}/100`
+                : `⚠️ ${pet.name} tidak baik-baik saja. Skor kesehatan IoT: ${score}/100 — perlu perhatian`,
+              type: isEmergency ? 'error' : 'warning',
+              pet_id: pet.id,
+            });
+          }
+        } else if (score != null && score >= 65) {
+          // Reset jika sudah membaik
+          if (alertedScoreRef.current !== null && alertedScoreRef.current < 65) {
+            alertedScoreRef.current = null;
+            setIotHealthTip(null);
+          }
+        }
+      }
     } catch (e) {
       console.error('Dashboard IoT error', e);
     } finally {
@@ -520,6 +613,8 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
 
   useEffect(() => {
     if (!selectedPet?.id) return;
+    alertedScoreRef.current = null;
+    setIotHealthTip(null);
     fetchAllIot(selectedPet.id);
 
     // Realtime: re-fetch kalkulasi saat ada data IoT baru
@@ -646,7 +741,8 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   );
 
   const smartTips = getSmartTips(selectedPet, records);
-  const tip = smartTips?.[0] || (TIPS_DB[selectedPet.species] || TIPS_DB['Kucing'])[0];
+  // Prioritas: kondisi IoT buruk > rekam medis > tips spesies harian
+  const tip = iotHealthTip || smartTips?.[0] || (TIPS_DB[selectedPet.species] || TIPS_DB['Kucing'])[0];
   const TipIcon = tip.icon;
 
   return (
@@ -796,11 +892,14 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
           {/* ── Single Smart Tip ── */}
           {(() => {
             const TIcon = tip.icon;
+            const isIotAlert = tip.source === 'iot-health';
             const isUrgent = tip.priority === 'urgent';
             const isHigh = tip.priority === 'high';
             const cardCls = isUrgent ? 'from-rose-500 to-rose-700' : isHigh ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-violet-600';
-            const badgeLabel = isUrgent ? 'Segera Tindak' : isHigh ? 'Perhatian' : tip.priority ? 'Rekomendasi' : 'Tips Hari Ini';
-            const badgeSrc = tip.priority ? 'Dari Rekam Medis' : selectedPet.species;
+            const badgeLabel = isIotAlert
+              ? (isUrgent ? '🚨 Kondisi Darurat' : '⚠️ Perlu Perhatian')
+              : isUrgent ? 'Segera Tindak' : isHigh ? 'Perhatian' : tip.priority ? 'Rekomendasi' : 'Tips Hari Ini';
+            const badgeSrc = isIotAlert ? 'Data IoT Realtime' : tip.priority ? 'Dari Rekam Medis' : selectedPet.species;
             return (
               <div className={`bg-gradient-to-br ${cardCls} p-6 rounded-[28px] text-white shadow-xl relative overflow-hidden`}>
                 <div className="relative z-10">
@@ -813,6 +912,17 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
                   </div>
                   <h4 className="font-black text-base mb-2 leading-snug">{tip.title}</h4>
                   <p className="text-[11px] opacity-90 leading-relaxed">{tip.body}</p>
+                  {/* Daftar parameter bermasalah dari IoT */}
+                  {isIotAlert && tip.issues?.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      {tip.issues.map((issue, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-white/15 rounded-xl px-3 py-1.5">
+                          <issue.icon size={11} className="shrink-0 opacity-90" />
+                          <span className="text-[10px] font-bold opacity-90">{issue.param}: {issue.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none" />
                 <div className="absolute -left-4 -top-4 w-20 h-20 bg-white/5 rounded-full blur-2xl pointer-events-none" />
@@ -1272,13 +1382,23 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                         ))}
                         <div>
                           <label className="label-style">Usia</label>
-                          <div className="flex gap-1">
-                            <input type="number" min="0" step="1" value={petForm.age || ''} onChange={e => setPetForm({ ...petForm, age: e.target.value })} className="input-style flex-1 min-w-0" />
-                            <select value={petForm.age_unit || 'tahun'} onChange={e => setPetForm({ ...petForm, age_unit: e.target.value })} className="input-style w-auto px-2 text-xs">
-                              <option value="tahun">Thn</option>
-                              <option value="minggu">Mgg</option>
-                            </select>
-                          </div>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="cth: 2 = 2 tahun, 3,5 = 3,5 minggu"
+                            value={petForm.age || ''}
+                            onChange={e => {
+                              const raw = e.target.value;
+                              const hasDecimal = raw.replace(',', '.').includes('.');
+                              setPetForm({ ...petForm, age: raw, age_unit: hasDecimal ? 'minggu' : 'tahun' });
+                            }}
+                            className="input-style"
+                          />
+                          {petForm.age != null && petForm.age !== '' && (
+                            <p className="text-[10px] mt-1 font-semibold text-indigo-500">
+                              → {String(petForm.age).replace(',','.')} {petForm.age_unit || 'tahun'}
+                            </p>
+                          )}
                         </div>
                         <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={petForm.weight || ''} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} className="input-style" /></div>
                         <div><label className="label-style">Gender</label><select value={petForm.gender || 'Jantan'} onChange={e => setPetForm({ ...petForm, gender: e.target.value })} className="input-style"><option>Jantan</option><option>Betina</option></select></div>
@@ -1412,13 +1532,24 @@ const AddPetModal = ({ onClose, onAdd, loading }) => {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label-style">Usia</label>
-              <div className="flex gap-1">
-                <input type="number" min="0" step="1" value={form.age} onChange={e => setForm({ ...form, age: e.target.value })} className="input-style flex-1 min-w-0" />
-                <select value={form.age_unit} onChange={e => setForm({ ...form, age_unit: e.target.value })} className="input-style w-auto px-2 text-xs">
-                  <option value="tahun">Thn</option>
-                  <option value="minggu">Mgg</option>
-                </select>
-              </div>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="cth: 2 = 2 tahun, 3,5 = 3,5 minggu"
+                value={form.age}
+                onChange={e => {
+                  const raw = e.target.value;
+                  const normalized = raw.replace(',', '.');
+                  const hasDecimal = normalized.includes('.');
+                  setForm({ ...form, age: raw, age_unit: hasDecimal ? 'minggu' : 'tahun' });
+                }}
+                className="input-style"
+              />
+              {form.age !== '' && (
+                <p className="text-[10px] mt-1 font-semibold text-indigo-500">
+                  → {form.age.replace(',','.')} {form.age_unit}
+                </p>
+              )}
             </div>
             <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" /></div>
           </div>
@@ -1663,7 +1794,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
             <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
               <HeartPulse size={12} className="text-rose-400" /> Tanda Vital
             </p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               <StatCard
                 label="Suhu Tubuh"
                 value={latest?.suhu != null ? parseFloat(latest.suhu).toFixed(1) : null}
@@ -1681,16 +1812,6 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
                 value={latest?.spo2 != null ? parseFloat(latest.spo2).toFixed(1) : null}
                 unit="%" icon={Activity} color="text-sky-500" bg="bg-sky-50"
                 status={spo2St?.label} statusColor={spo2St?.cls}
-              />
-              <StatCard
-                label="Mode Sensor"
-                value={mode ? (isKandang ? 'Kandang' : 'Kalung') : null}
-                unit={modeSource === 'iot' ? '(IoT)' : modeSource === 'species' ? '(Default)' : ''}
-                icon={isKandang ? Home : Tag}
-                color={isKandang ? 'text-amber-500' : 'text-indigo-500'}
-                bg={isKandang ? 'bg-amber-50' : 'bg-indigo-50'}
-                status={mode ? (isKandang ? 'Di Kandang' : 'Bebas') : '—'}
-                statusColor={isKandang ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}
               />
             </div>
           </div>
@@ -1941,7 +2062,8 @@ export default function App() {
   const [schedules, setSchedules] = useState([]);
   const [records, setRecords] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('petcare_tab') || 'dashboard');
+  const handleTabChange = (tab) => { localStorage.setItem('petcare_tab', tab); setActiveTab(tab); };
   const [showNotif, setShowNotif] = useState(false);
   const [showAddPet, setShowAddPet] = useState(false);
   const [toast, setToast] = useState(null);
@@ -2091,7 +2213,7 @@ export default function App() {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, unread: false } : n));
   };
 
-  const handleLogout = async () => { await authService.signOut(); setActiveTab('dashboard'); };
+  const handleLogout = async () => { await authService.signOut(); handleTabChange('dashboard'); };
 
   const handlePanggilDokter = () => {
     const query = encodeURIComponent('klinik hewan dokter hewan terdekat');
@@ -2154,7 +2276,7 @@ export default function App() {
         </div>
         <nav className="flex-1 space-y-1">
           {NAV.map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id)}
+            <button key={item.id} onClick={() => handleTabChange(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm transition-all font-semibold ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
               <item.icon size={17} />{item.label}
             </button>
@@ -2197,7 +2319,7 @@ export default function App() {
               {showNotif && <NotifPanel notifications={notifications} onMarkAllRead={handleMarkAllRead} onClearAll={handleClearAllNotif} onMarkOneRead={handleMarkOneRead} />}
             </div>
             <div className="h-6 w-px bg-slate-200" />
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('settings')}>
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleTabChange('settings')}>
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-bold text-slate-800">{(profile?.name || session.user.email || '').split(' ')[0]}</p>
                 <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">{profile?.role || 'Basic'}</p>
@@ -2210,7 +2332,7 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-6">
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} />}
+              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => addNotif(session.user.id, payload)} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} />}
@@ -2222,7 +2344,7 @@ export default function App() {
 
         <nav className="md:hidden flex bg-white border-t border-slate-100 px-2 py-2 shrink-0">
           {NAV.map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id)}
+            <button key={item.id} onClick={() => handleTabChange(item.id)}
               className={`flex-1 flex flex-col items-center gap-1 py-1 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
               <item.icon size={19} /><span className="text-[9px] font-bold">{item.label}</span>
             </button>
