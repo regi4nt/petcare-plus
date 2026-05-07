@@ -350,7 +350,7 @@ const Toast = ({ message, type = 'success', onClose }) => {
   const Icon = icons[type] || Info;
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, [onClose]);
   return (
-    <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] ${colors[type]} text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 anim-slide-down`}>
+    <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] ${colors[type]} text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3`}>
       <Icon size={16} /><span className="font-bold text-sm">{message}</span>
     </div>
   );
@@ -423,7 +423,7 @@ const PWAInstallModal = ({ onDismiss, platform, deferredPrompt, triggerInstall }
   const PlatformIcon = platform === 'ios' || platform === 'android' ? Smartphone : Monitor;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-zoom">
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden">
 
         {step === 'main' && (
@@ -673,7 +673,7 @@ const AuthPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md anim-zoom">
+      <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/logo.svg" alt="PetCare+" className="w-20 h-20 mx-auto mb-4 rounded-3xl shadow-2xl shadow-indigo-500/40" />
           <h1 className="text-4xl font-black text-white tracking-tight">PetCare<span className="text-indigo-400">+</span></h1>
@@ -1182,7 +1182,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
 
         {/* Inline Edit Form */}
         {editPetId && (
-          <div className="mt-3 bg-slate-50 rounded-[20px] border border-slate-100 p-4 anim-slide-up">
+          <div className="mt-3 bg-slate-50 rounded-[20px] border border-slate-100 p-4">
             <div className="flex justify-between items-center mb-4">
               <h4 className="font-bold text-slate-800 text-sm">Edit {pets.find(p => p.id === editPetId)?.name}</h4>
               <button onClick={() => setEditPetId(null)} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-400"><X size={15} /></button>
@@ -1454,7 +1454,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
 
       {deleteConfirm && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[28px] p-6 max-w-sm w-full shadow-2xl anim-zoom text-center">
+          <div className="bg-white rounded-[28px] p-6 max-w-sm w-full shadow-2xl text-center">
             <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={22} className="text-rose-500" /></div>
             <h4 className="font-black text-slate-800 text-lg mb-2">Hapus Hewan?</h4>
             <p className="text-sm text-slate-500 mb-6">Data akan dihapus permanen dari database.</p>
@@ -1611,7 +1611,7 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
       {/* ── Modal Tambah Jadwal ── */}
       {showForm && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
               <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full" />
               <div className="absolute right-8 bottom-0 w-14 h-14 bg-white/10 rounded-full" />
@@ -1806,7 +1806,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
       {/* ── Modal Detail ── */}
       {selected && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setSelected(null)}>
-          <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <div className="flex items-center gap-2 mb-1">
@@ -1871,7 +1871,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
       {/* ── Modal Konfirmasi Hapus ── */}
       {deleteConfirmId && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] p-7 max-w-sm w-full shadow-2xl anim-zoom text-center">
+          <div className="bg-white rounded-[32px] p-7 max-w-sm w-full shadow-2xl text-center">
             <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 size={22} className="text-rose-500" />
             </div>
@@ -1888,7 +1888,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
       {/* ── Modal Form Tambah ── */}
       {showForm && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
               <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full" />
               <div className="absolute right-8 bottom-0 w-14 h-14 bg-white/10 rounded-full" />
@@ -2238,7 +2238,7 @@ const NotifPanel = ({ notifications, onMarkAllRead, onClearAll, onMarkOneRead })
   const typeIcon = { success: CheckCircle2, warning: AlertCircle, info: Info };
   const typeColor = { success: 'text-emerald-500', warning: 'text-amber-500', info: 'text-indigo-500' };
   return (
-    <div className="absolute right-0 top-14 w-96 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50 anim-slide-down">
+    <div className="absolute right-0 top-14 w-96 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50">
       <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
         <span className="font-black text-slate-800">Notifikasi
           <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full ml-2">{notifications.filter(n => n.unread).length}</span>
@@ -2276,12 +2276,19 @@ const AddPetModal = ({ onClose, onAdd, loading }) => {
   const [form, setForm] = useState({ name: '', species: 'Kucing', breed: '', age: '1', age_unit: 'tahun', weight: '1', gender: 'Jantan', color: '', notes: '' });
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-black text-slate-800">Tambah Anabul</h3>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-400"><X size={20} /></button>
+      <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
+          <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full" />
+          <div className="absolute right-8 bottom-0 w-14 h-14 bg-white/10 rounded-full" />
+          <div className="flex justify-between items-start relative">
+            <div>
+              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mb-1">Daftarkan Hewan</p>
+              <h3 className="text-2xl font-black text-white">Tambah Anabul</h3>
+            </div>
+            <button onClick={onClose} className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all"><X size={18} /></button>
+          </div>
         </div>
-        <form onSubmit={e => { e.preventDefault(); onAdd(form); }} className="space-y-4">
+        <form onSubmit={e => { e.preventDefault(); onAdd(form); }} className="space-y-4 p-7">
           <div><label className="label-style">Nama Panggilan</label><input required type="text" placeholder="Luna, Max, dsb..." value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="input-style" /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label-style">Spesies</label><select value={form.species} onChange={e => setForm({ ...form, species: e.target.value })} className="input-style">{Object.keys(PET_ICONS).map(s => <option key={s}>{s}</option>)}</select></div>
@@ -2535,7 +2542,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {isLive && (
-            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-100 px-3 py-1.5 rounded-full animate-pulse">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-100 px-3 py-1.5 rounded-full">
               <Radio size={11} /> LIVE
             </span>
           )}
@@ -3173,8 +3180,8 @@ export default function App() {
         <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 py-2 shrink-0">
           {NAV.map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
-              className={`flex-1 flex flex-col items-center gap-1 py-1 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
-              <item.icon size={19} /><span className="text-[9px] font-bold">{item.label}</span>
+              className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+              <item.icon size={21} />
             </button>
           ))}
           {/* FAB Darurat — melayang di atas kanan navbar */}
