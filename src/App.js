@@ -1611,12 +1611,19 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
       {/* ── Modal Tambah Jadwal ── */}
       {showForm && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-slate-800">Tambah Jadwal</h3>
-              <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"><X size={20} /></button>
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
+              <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full" />
+              <div className="absolute right-8 bottom-0 w-14 h-14 bg-white/10 rounded-full" />
+              <div className="flex justify-between items-start relative">
+                <div>
+                  <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-1">Jadwal Baru</p>
+                  <h3 className="text-2xl font-black text-white">Tambah Jadwal</h3>
+                </div>
+                <button onClick={() => setShowForm(false)} className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all"><X size={18} /></button>
+              </div>
             </div>
-            <form onSubmit={handleAdd} className="space-y-4">
+            <form onSubmit={handleAdd} className="space-y-4 p-7">
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label-style">Hewan</label>
                   <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
@@ -1881,12 +1888,19 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
       {/* ── Modal Form Tambah ── */}
       {showForm && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
-          <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-slate-800">Catatan Medis Baru</h3>
-              <button onClick={() => setShowForm(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"><X size={20} /></button>
+          <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
+              <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full" />
+              <div className="absolute right-8 bottom-0 w-14 h-14 bg-white/10 rounded-full" />
+              <div className="flex justify-between items-start relative">
+                <div>
+                  <p className="text-blue-200 text-xs font-bold uppercase tracking-widest mb-1">Rekam Medis</p>
+                  <h3 className="text-2xl font-black text-white">Catatan Medis Baru</h3>
+                </div>
+                <button onClick={() => setShowForm(false)} className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all"><X size={18} /></button>
+              </div>
             </div>
-            <form onSubmit={handleAdd} className="space-y-4">
+            <form onSubmit={handleAdd} className="space-y-4 p-7">
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="label-style">Hewan</label>
                   <select value={form.pet_id} onChange={e => setForm({ ...form, pet_id: e.target.value })} className="input-style">
@@ -3024,23 +3038,11 @@ export default function App() {
 
   // Render loading screen
   if (loading) return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex flex-col items-center justify-center px-6">
-      <div className="flex flex-col items-center gap-5 w-full max-w-xs">
-        {/* Logo */}
-        <div className="w-20 h-20 bg-indigo-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-900/60 ring-4 ring-indigo-400/20">
-          <HeartPulse size={40} className="text-white" />
-        </div>
-        {/* App name */}
-        <div className="text-center">
-          <p className="text-white text-2xl font-black tracking-tight">PetCare<span className="text-indigo-400">+</span></p>
-          <p className="text-indigo-300 text-xs font-semibold mt-1">Pemantauan Kesehatan Hewan Pintar</p>
-        </div>
-        {/* Spinner + loading text */}
-        <div className="flex flex-col items-center gap-3 mt-2">
-          <Loader2 size={26} className="animate-spin text-indigo-400" />
-          <p className="text-indigo-400/70 text-xs font-semibold">Memuat aplikasi...</p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-b from-indigo-950 to-slate-900 flex flex-col items-center justify-center px-8 gap-0">
+      <img src="/logo.svg" alt="PetCare+" className="w-24 h-24 rounded-3xl shadow-2xl shadow-indigo-900/80 mb-7" />
+      <p className="text-white text-3xl font-black tracking-tight mb-1">PetCare<span className="text-indigo-400">+</span></p>
+      <p className="text-indigo-300/80 text-sm font-medium mb-10">Pemantauan Kesehatan Hewan Pintar</p>
+      <Loader2 size={22} className="animate-spin text-indigo-400/60" />
     </div>
   );
 
@@ -3079,7 +3081,6 @@ export default function App() {
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 p-5 shrink-0">
         <div className="flex items-center gap-3 mb-8">
           <img src="/logo.svg" alt="PetCare+" className="w-10 h-10 rounded-xl shadow-md shadow-indigo-200" />
-          <h1 className="text-xl font-black tracking-tight text-indigo-900">PetCare<span className="text-indigo-500">+</span></h1>
         </div>
         <nav className="flex-1 space-y-1">
           {NAV.map(item => (
@@ -3178,11 +3179,10 @@ export default function App() {
           ))}
           {/* FAB Darurat — melayang di atas kanan navbar */}
           <button onClick={handlePanggilDokter}
-            className="absolute -top-14 right-4 flex flex-col items-center gap-1 active:scale-95 transition-transform">
-            <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center shadow-lg shadow-rose-300 ring-4 ring-white">
-              <Phone size={18} className="text-white" />
+            className="absolute -top-7 right-4 -translate-y-full flex items-center justify-center active:scale-95 transition-transform">
+            <div className="w-14 h-14 bg-rose-500 rounded-full flex items-center justify-center shadow-xl shadow-rose-400/50 ring-4 ring-white">
+              <Phone size={22} className="text-white" />
             </div>
-            <span className="text-[9px] font-black text-rose-500 bg-white px-1.5 py-0.5 rounded-full shadow-sm">Darurat</span>
           </button>
         </nav>
       </main>
