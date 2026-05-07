@@ -120,13 +120,14 @@ const timeAgo = (ts) => {
 
 const isToday = (str) => str === todayStr;
 
-// Format usia: mendukung satuan 'tahun' (default) atau 'minggu'
+// Format usia: tampilkan gabungan nilai dan satuan dalam satu string
 const formatAge = (age, unit) => {
   if (age == null || age === '') return '-';
   const val = parseFloat(age);
   if (isNaN(val)) return '-';
-  if (unit === 'minggu') return `${val % 1 === 0 ? val : val} mgg`;
-  return `${val % 1 === 0 ? val : val} thn`;
+  const display = val % 1 === 0 ? val : val.toFixed(1);
+  if (unit === 'minggu') return `${display} minggu`;
+  return `${display} tahun`;
 };
 
 // Format berat: tampilkan desimal apa adanya, tidak dibulatkan
@@ -582,35 +583,42 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
       bg: 'bg-amber-50',
       isTempCard: true,
     },
-    {
-      label: 'Saturasi O₂',
-      value: fmt(iotCalc?.avg_spo2),
-      unit: '%',
-      status: spo2St.label,
-      statusCls: spo2St.cls,
-      icon: Activity,
-      color: 'text-sky-500',
-      bg: 'bg-sky-50',
-    },
     (() => {
-      // Mode di dashboard: utamakan dari IoT, fallback ke default spesies
-      const OUTDOOR_SP = ['Kucing', 'Anjing', 'Kelinci', 'Ferret'];
-      const dashIotMode = iotCalc?.latest_mode ?? null;
-      const dashSpeciesDefault = selectedPet
-        ? OUTDOOR_SP.includes(selectedPet.species) ? 'kalung' : 'kandang'
-        : null;
-      const dashMode    = dashIotMode ?? dashSpeciesDefault;
-      const dashKandang = dashMode === 'kandang';
-      const dashSrc     = dashIotMode ? 'IoT' : dashSpeciesDefault ? `Default` : null;
+      // Aktivitas: persentase waktu aktif bergerak dari data IoT
+      const actPct = iotCalc?.avg_activity_pct != null ? parseFloat(iotCalc.avg_activity_pct) : null;
+      const actVal = actPct != null ? actPct.toFixed(0) : null;
+      const actStatus = actVal == null ? { label: '—', cls: 'text-slate-400' }
+        : actPct >= 60 ? { label: 'Sangat Aktif', cls: 'text-emerald-600' }
+        : actPct >= 30 ? { label: 'Cukup Aktif', cls: 'text-indigo-600' }
+        : { label: 'Kurang Aktif', cls: 'text-amber-600' };
       return {
-        label: 'Mode Sensor',
-        value: dashMode ? (dashKandang ? 'Kandang' : 'Kalung') : null,
-        unit: dashSrc ? `(${dashSrc})` : '',
-        status: dashMode ? (dashKandang ? 'Di Rumah' : 'Bebas') : '—',
-        statusCls: dashKandang ? 'text-amber-600' : 'text-indigo-600',
-        icon: dashKandang ? Home : Tag,
-        color: dashKandang ? 'text-amber-500' : 'text-indigo-500',
-        bg: dashKandang ? 'bg-amber-50' : 'bg-indigo-50',
+        label: 'Aktivitas',
+        value: actVal,
+        unit: '%',
+        status: actStatus.label,
+        statusCls: actStatus.cls,
+        icon: Dumbbell,
+        color: 'text-emerald-500',
+        bg: 'bg-emerald-50',
+      };
+    })(),
+    (() => {
+      // Istirahat: kebalikan dari waktu aktif
+      const actPct = iotCalc?.avg_activity_pct != null ? parseFloat(iotCalc.avg_activity_pct) : null;
+      const restVal = actPct != null ? (100 - actPct).toFixed(0) : null;
+      const restStatus = restVal == null ? { label: '—', cls: 'text-slate-400' }
+        : (100 - actPct) >= 60 ? { label: 'Banyak Istirahat', cls: 'text-indigo-600' }
+        : (100 - actPct) >= 30 ? { label: 'Istirahat Normal', cls: 'text-sky-600' }
+        : { label: 'Sedikit Istirahat', cls: 'text-amber-600' };
+      return {
+        label: 'Istirahat',
+        value: restVal,
+        unit: '%',
+        status: restStatus.label,
+        statusCls: restStatus.cls,
+        icon: Clock,
+        color: 'text-sky-500',
+        bg: 'bg-sky-50',
       };
     })(),
   ];
@@ -1650,31 +1658,75 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
 
       {loading && !latest ? <Spinner text="Mengambil data sensor dari Supabase..." /> : (
         <>
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              label="Suhu Tubuh"
-              value={latest?.suhu != null ? parseFloat(latest.suhu).toFixed(1) : null}
-              unit="°C" icon={Thermometer} color="text-amber-500" bg="bg-amber-50"
-              status={suhuSt?.label} statusColor={suhuSt?.cls}
-            />
-            <StatCard
-              label="Detak Jantung"
-              value={latest?.heart_rate != null ? parseFloat(latest.heart_rate).toFixed(0) : null}
-              unit="BPM" icon={HeartPulse} color="text-rose-500" bg="bg-rose-50"
-              status={hrSt?.label} statusColor={hrSt?.cls}
-            />
-            <StatCard
-              label="Saturasi O2"
-              value={latest?.spo2 != null ? parseFloat(latest.spo2).toFixed(1) : null}
-              unit="%" icon={Activity} color="text-sky-500" bg="bg-sky-50"
-              status={spo2St?.label} statusColor={spo2St?.cls}
-            />
-            <StatCard
-              label="Akselerasi X"
-              value={latest?.ax ?? null}
-              unit="mg" icon={Cpu} color="text-violet-500" bg="bg-violet-50"
-            />
+          {/* Vital Signs Stat Cards */}
+          <div>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <HeartPulse size={12} className="text-rose-400" /> Tanda Vital
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                label="Suhu Tubuh"
+                value={latest?.suhu != null ? parseFloat(latest.suhu).toFixed(1) : null}
+                unit="°C" icon={Thermometer} color="text-amber-500" bg="bg-amber-50"
+                status={suhuSt?.label} statusColor={suhuSt?.cls}
+              />
+              <StatCard
+                label="Detak Jantung"
+                value={latest?.heart_rate != null ? parseFloat(latest.heart_rate).toFixed(0) : null}
+                unit="BPM" icon={HeartPulse} color="text-rose-500" bg="bg-rose-50"
+                status={hrSt?.label} statusColor={hrSt?.cls}
+              />
+              <StatCard
+                label="Saturasi O₂"
+                value={latest?.spo2 != null ? parseFloat(latest.spo2).toFixed(1) : null}
+                unit="%" icon={Activity} color="text-sky-500" bg="bg-sky-50"
+                status={spo2St?.label} statusColor={spo2St?.cls}
+              />
+              <StatCard
+                label="Mode Sensor"
+                value={mode ? (isKandang ? 'Kandang' : 'Kalung') : null}
+                unit={modeSource === 'iot' ? '(IoT)' : modeSource === 'species' ? '(Default)' : ''}
+                icon={isKandang ? Home : Tag}
+                color={isKandang ? 'text-amber-500' : 'text-indigo-500'}
+                bg={isKandang ? 'bg-amber-50' : 'bg-indigo-50'}
+                status={mode ? (isKandang ? 'Di Kandang' : 'Bebas') : '—'}
+                statusColor={isKandang ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}
+              />
+            </div>
+          </div>
+
+          {/* Akselerasi / Gerakan Stat Cards */}
+          <div>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+              <Dumbbell size={12} className="text-violet-400" /> Sensor Gerak (Akselerometer)
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard label="Akselerasi X" value={latest?.ax ?? null} unit="mg" icon={Cpu} color="text-violet-500" bg="bg-violet-50" />
+              <StatCard label="Akselerasi Y" value={latest?.ay ?? null} unit="mg" icon={Cpu} color="text-purple-500" bg="bg-purple-50" />
+              <StatCard label="Akselerasi Z" value={latest?.az ?? null} unit="mg" icon={Cpu} color="text-fuchsia-500" bg="bg-fuchsia-50" />
+              <StatCard
+                label="Intensitas Gerak"
+                value={(() => {
+                  const ax = parseFloat(latest?.ax), ay = parseFloat(latest?.ay), az = parseFloat(latest?.az);
+                  if (isNaN(ax) && isNaN(ay) && isNaN(az)) return null;
+                  const mag = Math.sqrt((isNaN(ax)?0:ax)**2 + (isNaN(ay)?0:ay)**2 + (isNaN(az)?0:az)**2);
+                  return mag.toFixed(0);
+                })()}
+                unit="mg" icon={Radio} color="text-pink-500" bg="bg-pink-50"
+                status={(() => {
+                  const ax = parseFloat(latest?.ax), ay = parseFloat(latest?.ay), az = parseFloat(latest?.az);
+                  if (isNaN(ax) && isNaN(ay) && isNaN(az)) return null;
+                  const mag = Math.sqrt((isNaN(ax)?0:ax)**2 + (isNaN(ay)?0:ay)**2 + (isNaN(az)?0:az)**2);
+                  return mag > 200 ? 'Aktif' : mag > 80 ? 'Sedang' : 'Diam';
+                })()}
+                statusColor={(() => {
+                  const ax = parseFloat(latest?.ax), ay = parseFloat(latest?.ay), az = parseFloat(latest?.az);
+                  if (isNaN(ax) && isNaN(ay) && isNaN(az)) return null;
+                  const mag = Math.sqrt((isNaN(ax)?0:ax)**2 + (isNaN(ay)?0:ay)**2 + (isNaN(az)?0:az)**2);
+                  return mag > 200 ? 'bg-emerald-100 text-emerald-700' : mag > 80 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600';
+                })()}
+              />
+            </div>
           </div>
 
           {/* Mini Charts */}
@@ -1682,23 +1734,167 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-black text-slate-800 flex items-center gap-2">
-                  <Activity size={16} className="text-indigo-500" /> Grafik Histori
+                  <Activity size={16} className="text-indigo-500" /> Grafik Histori Real-time
                 </h3>
                 <span className="text-xs text-slate-400 font-semibold">{history.length} data terakhir</span>
               </div>
-              <div className="grid grid-cols-3 gap-6">
-                <MiniChart data={history} field="suhu"       color="bg-amber-400" label="Suhu (deg C)" />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                <MiniChart data={history} field="suhu"       color="bg-amber-400" label="Suhu (°C)" />
                 <MiniChart data={history} field="heart_rate" color="bg-rose-400"  label="Detak Jantung (BPM)" />
-                <MiniChart data={history} field="spo2"       color="bg-sky-400"   label="SpO2 (%)" />
+                <MiniChart data={history} field="spo2"       color="bg-sky-400"   label="SpO₂ (%)" />
+                <MiniChart data={history} field="ax"         color="bg-violet-400" label="Akselerasi X (mg)" />
               </div>
             </div>
           )}
+
+          {/* Detail Sensor yang Dipakai */}
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-5">
+              <Cpu size={16} className="text-indigo-500" /> Detail Sensor yang Dipakai
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Sensor Suhu */}
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <Thermometer size={16} className="text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="font-black text-sm text-amber-800">MLX90614</p>
+                    <p className="text-[10px] text-amber-600 font-semibold">Sensor Suhu Inframerah</p>
+                  </div>
+                </div>
+                <div className="space-y-1 mt-3">
+                  {[['Tipe', 'Non-kontak IR'], ['Rentang', '-40 s/d 125°C'], ['Akurasi', '±0.5°C'], ['Interface', 'I²C (SMBus)'], ['Data Field', 'suhu']].map(([k,v]) => (
+                    <div key={k} className="flex justify-between text-[11px]">
+                      <span className="text-amber-600 font-medium">{k}</span>
+                      <span className="text-amber-800 font-bold">{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-amber-600 mt-3 leading-relaxed">Mengukur suhu permukaan tubuh hewan tanpa kontak langsung. Ideal untuk hewan berbulu tebal.</p>
+              </div>
+
+              {/* Sensor Detak Jantung & SpO2 */}
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-rose-100 rounded-xl flex items-center justify-center">
+                    <HeartPulse size={16} className="text-rose-600" />
+                  </div>
+                  <div>
+                    <p className="font-black text-sm text-rose-800">MAX30102</p>
+                    <p className="text-[10px] text-rose-600 font-semibold">Sensor Oksimetri & HR</p>
+                  </div>
+                </div>
+                <div className="space-y-1 mt-3">
+                  {[['Tipe', 'Fotopletysmografi'], ['LED', 'Merah 660nm + IR 880nm'], ['Resolusi ADC', '18-bit'], ['Interface', 'I²C'], ['Data Field', 'heart_rate, spo2']].map(([k,v]) => (
+                    <div key={k} className="flex justify-between text-[11px]">
+                      <span className="text-rose-600 font-medium">{k}</span>
+                      <span className="text-rose-800 font-bold">{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-rose-600 mt-3 leading-relaxed">Mengukur detak jantung dan saturasi oksigen darah via pantulan cahaya pada pembuluh darah.</p>
+              </div>
+
+              {/* Sensor Gerak / IMU */}
+              <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-violet-100 rounded-xl flex items-center justify-center">
+                    <Radio size={16} className="text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="font-black text-sm text-violet-800">MPU6050</p>
+                    <p className="text-[10px] text-violet-600 font-semibold">IMU 6-Axis (Akselerometer)</p>
+                  </div>
+                </div>
+                <div className="space-y-1 mt-3">
+                  {[['Tipe', '3-axis Gyro + Accel'], ['Rentang Accel', '±2g / ±4g / ±8g / ±16g'], ['Resolusi', '16-bit ADC'], ['Interface', 'I²C / SPI'], ['Data Field', 'ax, ay, az']].map(([k,v]) => (
+                    <div key={k} className="flex justify-between text-[11px]">
+                      <span className="text-violet-600 font-medium">{k}</span>
+                      <span className="text-violet-800 font-bold">{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-violet-600 mt-3 leading-relaxed">Mendeteksi gerakan dan orientasi untuk menentukan tingkat aktivitas fisik hewan secara real-time.</p>
+              </div>
+            </div>
+
+            {/* Mikrokontroler */}
+            <div className="mt-4 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 bg-indigo-100 rounded-xl flex items-center justify-center">
+                  <Cpu size={17} className="text-indigo-600" />
+                </div>
+                <div>
+                  <p className="font-black text-sm text-slate-800">ESP32 — Mikrokontroler Utama</p>
+                  <p className="text-[10px] text-slate-500 font-semibold">Dual-core Xtensa LX6 · Wi-Fi 802.11 b/g/n · Bluetooth 4.2</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  ['Frekuensi Kirim', isKandang ? '5 detik' : '15 detik'],
+                  ['Protokol', 'HTTPS REST → Supabase'],
+                  ['Firmware', 'Arduino IDE (C++)'],
+                  ['Power', 'USB 5V / LiPo 3.7V'],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-white rounded-xl p-2.5 border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{k}</p>
+                    <p className="text-xs font-bold text-slate-700 mt-0.5">{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Tabel Referensi Nilai Normal */}
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-4">
+              <Info size={16} className="text-indigo-500" /> Referensi Nilai Normal Vital Sign Hewan
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 rounded-xl">
+                    <th className="text-left p-3 font-black text-slate-500 rounded-l-xl">Spesies</th>
+                    <th className="text-center p-3 font-black text-amber-600">Suhu (°C)</th>
+                    <th className="text-center p-3 font-black text-rose-600">Detak Jantung (BPM)</th>
+                    <th className="text-center p-3 font-black text-sky-600 rounded-r-xl">SpO₂ (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['Kucing', '38.1 – 39.2', '120 – 140', '≥ 95'],
+                    ['Anjing', '37.5 – 39.2', '60 – 120', '≥ 95'],
+                    ['Kelinci', '38.5 – 40.0', '120 – 150', '≥ 95'],
+                    ['Hamster', '37.0 – 38.5', '250 – 500', '≥ 95'],
+                    ['Marmut', '37.2 – 39.5', '150 – 250', '≥ 95'],
+                  ].map(([sp, suhu, hr, spo2], idx) => {
+                    const isSelected = selectedPet?.species === sp;
+                    return (
+                      <tr key={sp} className={`border-t border-slate-50 ${isSelected ? 'bg-indigo-50' : idx % 2 === 0 ? '' : 'bg-slate-50/50'}`}>
+                        <td className="p-3 font-bold text-slate-700 flex items-center gap-1.5">
+                          {isSelected && <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full inline-block" />}
+                          {sp}
+                          {isSelected && <span className="text-[9px] bg-indigo-100 text-indigo-700 font-black px-1.5 py-0.5 rounded-full">Aktif</span>}
+                        </td>
+                        <td className="p-3 text-center font-semibold text-slate-600">{suhu}</td>
+                        <td className="p-3 text-center font-semibold text-slate-600">{hr}</td>
+                        <td className="p-3 text-center font-semibold text-slate-600">{spo2}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-3">* Nilai referensi bersifat indikatif. Konsultasikan dengan dokter hewan untuk diagnosis akurat.</p>
+          </div>
 
           {/* Device Info */}
           <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-black text-slate-800 flex items-center gap-2">
-                <Cpu size={16} className="text-slate-400" /> Info Perangkat IoT
+                <Wifi size={16} className="text-slate-400" /> Status Koneksi Perangkat
               </h3>
               {lastUpdate && (
                 <span className="text-xs text-slate-400 font-semibold">
@@ -1710,9 +1906,12 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
               {[
                 ["Device ID", latest?.device_id ?? "—"],
                 ["Mode Aktif", mode ? (isKandang ? "Kandang" : "Kalung") : "—"],
-                ["Sumber Mode", modeSource === 'iot' ? "IoT" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
+                ["Sumber Mode", modeSource === 'iot' ? "Dari ESP32" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
+                ["Interval Kirim", mode ? (isKandang ? "5 detik" : "15 detik") : "—"],
                 ["Data Tersimpan", history.length + " rekaman"],
-                ["Status", latest ? "Terhubung" : "Menunggu ESP32"],
+                ["Firmware", "esp32_iot_monitoring"],
+                ["Database", "Supabase Realtime"],
+                ["Status Koneksi", latest ? "🟢 Terhubung" : "🔴 Menunggu"],
               ].map(([k, v]) => (
                 <div key={k} className="bg-slate-50 rounded-2xl p-3">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{k}</p>
