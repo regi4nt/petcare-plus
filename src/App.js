@@ -120,6 +120,24 @@ const timeAgo = (ts) => {
 
 const isToday = (str) => str === todayStr;
 
+// Format usia: mendukung satuan 'tahun' (default) atau 'minggu'
+const formatAge = (age, unit) => {
+  if (age == null || age === '') return '-';
+  const val = parseFloat(age);
+  if (isNaN(val)) return '-';
+  if (unit === 'minggu') return `${val % 1 === 0 ? val : val} mgg`;
+  return `${val % 1 === 0 ? val : val} thn`;
+};
+
+// Format berat: tampilkan desimal apa adanya, tidak dibulatkan
+const formatWeight = (weight) => {
+  if (weight == null || weight === '') return '-';
+  const val = parseFloat(weight);
+  if (isNaN(val)) return '-';
+  // Hapus trailing zero, tapi tetap tunjukkan desimal jika ada
+  return val % 1 === 0 ? `${val}` : `${val}`;
+};
+
 // ─── PUSH NOTIFICATION HOOK ───────────────────────────────────────────
 // Minta izin notifikasi device dan kirim push saat jadwal hampir tiba
 const usePushNotifications = (schedules, pets) => {
@@ -436,6 +454,21 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   // bukan data raw langsung. Data raw tersedia di halaman Monitor IoT.
   const [iotCalc, setIotCalc]     = useState(null);
   const [iotLoading, setIotLoading] = useState(false);
+  const [tempUnit, setTempUnit]   = useState('C'); // 'C' | 'F' | 'K'
+
+  // ── Konversi suhu ─────────────────────────────────────────────────
+  const convertTemp = (celsius, unit) => {
+    if (celsius == null) return null;
+    const c = parseFloat(celsius);
+    if (unit === 'F') return (c * 9/5 + 32);
+    if (unit === 'K') return (c + 273.15);
+    return c;
+  };
+  const tempUnitLabel = tempUnit === 'C' ? '°C' : tempUnit === 'F' ? '°F' : 'K';
+  const fmtTemp = (celsius) => {
+    const converted = convertTemp(celsius, tempUnit);
+    return converted != null ? converted.toFixed(1) : null;
+  };
 
   const fetchCalculated = async (petId) => {
     if (!petId) return;
@@ -510,13 +543,14 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     },
     {
       label: 'Suhu Tubuh',
-      value: fmt(iotCalc?.avg_suhu),
-      unit: '°C',
+      value: fmtTemp(iotCalc?.avg_suhu),
+      unit: tempUnitLabel,
       status: suhuSt.label,
       statusCls: suhuSt.cls,
       icon: Thermometer,
       color: 'text-amber-500',
       bg: 'bg-amber-50',
+      isTempCard: true,
     },
     {
       label: 'Saturasi O₂',
@@ -528,16 +562,27 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
       color: 'text-sky-500',
       bg: 'bg-sky-50',
     },
-    {
-      label: 'Mode Sensor',
-      value: iotCalc?.latest_mode ? (iotCalc.latest_mode === 'kandang' ? 'Kandang' : 'Kalung') : null,
-      unit: '',
-      status: iotCalc ? (iotCalc.latest_mode === 'kandang' ? 'Di Rumah' : 'Bebas') : '—',
-      statusCls: iotCalc?.latest_mode === 'kandang' ? 'text-amber-600' : 'text-indigo-600',
-      icon: iotCalc?.latest_mode === 'kandang' ? Home : Tag,
-      color: iotCalc?.latest_mode === 'kandang' ? 'text-amber-500' : 'text-indigo-500',
-      bg: iotCalc?.latest_mode === 'kandang' ? 'bg-amber-50' : 'bg-indigo-50',
-    },
+    (() => {
+      // Mode di dashboard: utamakan dari IoT, fallback ke default spesies
+      const OUTDOOR_SP = ['Kucing', 'Anjing', 'Kelinci', 'Ferret'];
+      const dashIotMode = iotCalc?.latest_mode ?? null;
+      const dashSpeciesDefault = selectedPet
+        ? OUTDOOR_SP.includes(selectedPet.species) ? 'kalung' : 'kandang'
+        : null;
+      const dashMode    = dashIotMode ?? dashSpeciesDefault;
+      const dashKandang = dashMode === 'kandang';
+      const dashSrc     = dashIotMode ? 'IoT' : dashSpeciesDefault ? `Default` : null;
+      return {
+        label: 'Mode Sensor',
+        value: dashMode ? (dashKandang ? 'Kandang' : 'Kalung') : null,
+        unit: dashSrc ? `(${dashSrc})` : '',
+        status: dashMode ? (dashKandang ? 'Di Rumah' : 'Bebas') : '—',
+        statusCls: dashKandang ? 'text-amber-600' : 'text-indigo-600',
+        icon: dashKandang ? Home : Tag,
+        color: dashKandang ? 'text-amber-500' : 'text-indigo-500',
+        bg: dashKandang ? 'bg-amber-50' : 'bg-indigo-50',
+      };
+    })(),
   ];
 
   // ── Bar chart dari history akselerasi IoT (proxy aktivitas) ───────
@@ -589,7 +634,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
               <div className="text-left overflow-hidden">
                 <p className="font-bold text-slate-800 truncate">{pet.name}</p>
                 <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">{pet.species} · {pet.breed}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{pet.age} thn · {pet.weight} kg</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{formatAge(pet.age, pet.age_unit)} · {formatWeight(pet.weight)} kg</p>
               </div>
             </button>
           ))}
@@ -615,13 +660,26 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             {stats.map((st, i) => (
               <div key={i} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
                 <div className={`${st.bg} ${st.color} w-10 h-10 rounded-2xl flex items-center justify-center mb-3`}><st.icon size={20} /></div>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
+                  {st.isTempCard && (
+                    <div className="flex gap-0.5">
+                      {['C','F','K'].map(u => (
+                        <button key={u} onClick={() => setTempUnit(u)}
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-all ${tempUnit === u ? 'bg-amber-500 text-white' : 'text-slate-400 hover:bg-slate-100'}`}>
+                          {u === 'C' ? '°C' : u === 'F' ? '°F' : 'K'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <p className="text-xl font-black mt-1">
                   {iotLoading
                     ? <span className="text-slate-300 text-base">...</span>
                     : st.value != null
                       ? <>{st.value}<span className="text-xs font-semibold text-slate-400 ml-0.5">{st.unit}</span></>
                       : <span className="text-slate-300">--</span>
+
                   }
                 </p>
                 <span className={`text-[10px] font-bold mt-1 block ${st.statusCls}`}>{st.status}</span>
@@ -699,7 +757,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
                 <p className="text-xs text-slate-500">{selectedPet.species} · {selectedPet.breed}</p>
               </div>
             </div>
-            {[['Usia', `${selectedPet.age} Tahun`], ['Berat', `${selectedPet.weight} kg`], ['Gender', selectedPet.gender || '-'], ['Warna', selectedPet.color || '-']].map(([k, v]) => (
+            {[['Usia', formatAge(selectedPet.age, selectedPet.age_unit)], ['Berat', `${formatWeight(selectedPet.weight)} kg`], ['Gender', selectedPet.gender || '-'], ['Warna', selectedPet.color || '-']].map(([k, v]) => (
               <div key={k} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
                 <span className="text-xs text-slate-500">{k}</span>
                 <span className="text-xs font-bold text-slate-800">{v}</span>
@@ -966,7 +1024,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
                 <div><label className="label-style">Klinik</label><input type="text" value={form.clinic} onChange={e => setForm({ ...form, clinic: e.target.value })} className="input-style" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label-style">Berat (kg)</label><input type="number" step="0.1" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" /></div>
+                <div><label className="label-style">Berat (kg)</label><input type="number" step="0.01" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" /></div>
                 <div><label className="label-style">Suhu (C)</label><input type="number" step="0.1" value={form.temp} onChange={e => setForm({ ...form, temp: e.target.value })} className="input-style" /></div>
               </div>
               <div><label className="label-style">Catatan</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="input-style resize-none" /></div>
@@ -1148,9 +1206,20 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                         <button onClick={() => setEditPetId(null)} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400"><X size={17} /></button>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        {[['Nama', 'name', 'text'], ['Ras', 'breed', 'text'], ['Usia (Thn)', 'age', 'number'], ['Berat (kg)', 'weight', 'number']].map(([l, k, t]) => (
+                        {[['Nama', 'name', 'text'], ['Ras', 'breed', 'text']].map(([l, k, t]) => (
                           <div key={k}><label className="label-style">{l}</label><input type={t} value={petForm[k] || ''} onChange={e => setPetForm({ ...petForm, [k]: e.target.value })} className="input-style" /></div>
                         ))}
+                        <div>
+                          <label className="label-style">Usia</label>
+                          <div className="flex gap-1">
+                            <input type="number" min="0" step="1" value={petForm.age || ''} onChange={e => setPetForm({ ...petForm, age: e.target.value })} className="input-style flex-1 min-w-0" />
+                            <select value={petForm.age_unit || 'tahun'} onChange={e => setPetForm({ ...petForm, age_unit: e.target.value })} className="input-style w-auto px-2 text-xs">
+                              <option value="tahun">Thn</option>
+                              <option value="minggu">Mgg</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={petForm.weight || ''} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} className="input-style" /></div>
                         <div><label className="label-style">Gender</label><select value={petForm.gender || 'Jantan'} onChange={e => setPetForm({ ...petForm, gender: e.target.value })} className="input-style"><option>Jantan</option><option>Betina</option></select></div>
                         <div><label className="label-style">Warna</label><input type="text" value={petForm.color || ''} onChange={e => setPetForm({ ...petForm, color: e.target.value })} className="input-style" /></div>
                       </div>
@@ -1167,7 +1236,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                       <PetAvatar species={pet.species} size="md" />
                       <div className="flex-1">
                         <p className="font-bold text-slate-800">{pet.name}</p>
-                        <p className="text-xs text-slate-500">{pet.species} · {pet.breed} · {pet.age} thn · {pet.weight} kg</p>
+                        <p className="text-xs text-slate-500">{pet.species} · {pet.breed} · {formatAge(pet.age, pet.age_unit)} · {formatWeight(pet.weight)} kg</p>
                       </div>
                       <button onClick={() => { setEditPetId(pet.id); setPetForm({ ...pet }); }} className="p-2.5 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all">
                         <Edit3 size={16} />
@@ -1264,7 +1333,7 @@ const NotifPanel = ({ notifications, onMarkAllRead, onClearAll, onMarkOneRead })
 
 // ─── ADD PET MODAL ────────────────────────────────────────────────────
 const AddPetModal = ({ onClose, onAdd, loading }) => {
-  const [form, setForm] = useState({ name: '', species: 'Kucing', breed: '', age: '1', weight: '1', gender: 'Jantan', color: '', notes: '' });
+  const [form, setForm] = useState({ name: '', species: 'Kucing', breed: '', age: '1', age_unit: 'tahun', weight: '1', gender: 'Jantan', color: '', notes: '' });
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
@@ -1280,8 +1349,17 @@ const AddPetModal = ({ onClose, onAdd, loading }) => {
           </div>
           <div><label className="label-style">Jenis Ras</label><input required type="text" placeholder="Persian, Golden, dsb..." value={form.breed} onChange={e => setForm({ ...form, breed: e.target.value })} className="input-style" /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label-style">Usia (Thn)</label><input type="number" min="0" step="0.5" value={form.age} onChange={e => setForm({ ...form, age: e.target.value })} className="input-style" /></div>
-            <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.1" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" /></div>
+            <div>
+              <label className="label-style">Usia</label>
+              <div className="flex gap-1">
+                <input type="number" min="0" step="1" value={form.age} onChange={e => setForm({ ...form, age: e.target.value })} className="input-style flex-1 min-w-0" />
+                <select value={form.age_unit} onChange={e => setForm({ ...form, age_unit: e.target.value })} className="input-style w-auto px-2 text-xs">
+                  <option value="tahun">Thn</option>
+                  <option value="minggu">Mgg</option>
+                </select>
+              </div>
+            </div>
+            <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={form.weight} onChange={e => setForm({ ...form, weight: e.target.value })} className="input-style" /></div>
           </div>
           <div><label className="label-style">Warna</label><input type="text" placeholder="Putih, hitam, dsb..." value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} className="input-style" /></div>
           <div><label className="label-style">Catatan (opsional)</label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} className="input-style resize-none" /></div>
@@ -1393,8 +1471,30 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
     </div>
   );
 
-  const mode = latest?.mode;
+  // Spesies yang cenderung banyak gerak di luar kandang → default mode kalung
+  const OUTDOOR_SPECIES = ['Kucing', 'Anjing', 'Kelinci', 'Ferret'];
+  // Spesies yang cenderung tinggal di dalam kandang → default mode kandang
+  const INDOOR_SPECIES  = ['Hamster', 'Marmut', 'Sugar Glider', 'Landak Mini'];
+
+  // Tentukan default mode berdasarkan spesies hewan
+  const speciesDefaultMode = selectedPet
+    ? OUTDOOR_SPECIES.includes(selectedPet.species)
+      ? 'kalung'
+      : 'kandang'
+    : null;
+
+  // Mode final: utamakan data dari IoT (latest?.mode),
+  // jika IoT belum ada data gunakan default dari spesies
+  const iotMode = latest?.mode ?? null;
+  const mode    = iotMode ?? speciesDefaultMode;
   const isKandang = mode === 'kandang';
+
+  // Sumber mode untuk ditampilkan ke user
+  const modeSource = iotMode
+    ? 'iot'        // mode diterima langsung dari perangkat IoT
+    : speciesDefaultMode
+    ? 'species'    // mode default berdasarkan jenis hewan
+    : null;
 
   const getSuhuStatus = (s) => {
     if (s == null) return null;
@@ -1450,11 +1550,33 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
             }
           </div>
           <div>
-            <p className={`font-black text-lg ${isKandang ? "text-amber-800" : "text-indigo-800"}`}>
-              Mode {isKandang ? "Kandang" : "Kalung"}
-            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className={`font-black text-lg ${isKandang ? "text-amber-800" : "text-indigo-800"}`}>
+                Mode {isKandang ? "Kandang" : "Kalung"}
+              </p>
+              {/* Badge sumber mode */}
+              {modeSource === 'iot' && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                  <Wifi size={9} /> Dari IoT
+                </span>
+              )}
+              {modeSource === 'species' && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 flex items-center gap-1">
+                  ✦ Default Spesies
+                </span>
+              )}
+            </div>
             <p className={`text-xs font-semibold ${isKandang ? "text-amber-600" : "text-indigo-500"}`}>
-              {isKandang ? "Hewan di kandang — kirim data tiap 5 detik" : "Hewan bebas bergerak — kirim data tiap 15 detik"}
+              {modeSource === 'iot'
+                ? isKandang
+                  ? "IoT terdeteksi di kandang — kirim data tiap 5 detik"
+                  : "IoT terdeteksi bebas bergerak — kirim data tiap 15 detik"
+                : modeSource === 'species'
+                ? isKandang
+                  ? `${selectedPet?.species} cenderung di kandang — menunggu konfirmasi IoT`
+                  : `${selectedPet?.species} aktif di luar — menunggu konfirmasi IoT`
+                : "Menunggu data dari perangkat IoT..."
+              }
             </p>
           </div>
         </div>
@@ -1533,6 +1655,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
               {[
                 ["Device ID", latest?.device_id ?? "—"],
                 ["Mode Aktif", mode ? (isKandang ? "Kandang" : "Kalung") : "—"],
+                ["Sumber Mode", modeSource === 'iot' ? "IoT" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
                 ["Data Tersimpan", history.length + " rekaman"],
                 ["Status", latest ? "Terhubung" : "Menunggu ESP32"],
               ].map(([k, v]) => (
