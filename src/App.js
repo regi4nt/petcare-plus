@@ -296,15 +296,13 @@ const getSmartTips = (pet, records) => {
     });
   }
 
-  // Tambahkan tips spesies sebagai fallback jika kurang dari 2 smart tips
-  const allSpeciesTips = speciesTips.filter((_, i) => !smartTips.find(st => st.title === speciesTips[i]?.title));
-  const needed = Math.max(0, 2 - smartTips.length);
-  const todayIdx = new Date().getDate();
-  for (let i = 0; i < needed && i < allSpeciesTips.length; i++) {
-    smartTips.push(allSpeciesTips[(todayIdx + i) % allSpeciesTips.length]);
+  // Tambahkan tips spesies sebagai fallback jika belum ada smart tip
+  if (smartTips.length === 0) {
+    const todayIdx = new Date().getDate();
+    smartTips.push(speciesTips[todayIdx % speciesTips.length]);
   }
 
-  return smartTips.slice(0, 3);
+  return smartTips.slice(0, 1);
 };
 
 // ─── SMALL COMPONENTS ─────────────────────────────────────────────────
@@ -644,24 +642,37 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Banner kesimpulan kondisi IoT */}
-          <div className={`flex items-center justify-between px-5 py-3 rounded-2xl ${overall.cls}`}>
-            <div className="flex items-center gap-2">
-              <Activity size={14} />
-              <span className="text-xs font-bold">{overall.label}</span>
+          <div className={`flex items-center justify-between px-5 py-3.5 rounded-2xl border ${
+            overall.cls.includes('emerald') ? 'bg-emerald-50 border-emerald-100' :
+            overall.cls.includes('amber') ? 'bg-amber-50 border-amber-100' :
+            overall.cls.includes('rose') ? 'bg-rose-50 border-rose-100' :
+            'bg-slate-50 border-slate-100'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${overall.cls}`}>
+                <Activity size={14} />
+              </div>
+              <div>
+                <span className={`text-sm font-black ${overall.cls.replace('bg-', 'text-').replace('-100', '-700').replace('-50', '-700')}`}>
+                  {overall.label}
+                </span>
+                {iotCalc && (
+                  <span className="text-[10px] text-slate-400 font-semibold ml-2">
+                    dari {iotCalc.reading_count} pembacaan IoT
+                  </span>
+                )}
+              </div>
             </div>
-            {iotCalc && (
-              <span className="text-[10px] font-semibold opacity-70">
-                Rata-rata {iotCalc.reading_count} pembacaan IoT
-              </span>
+            {!iotCalc && (
+              <span className="text-[10px] text-slate-400 font-semibold">Hubungkan IoT untuk data real-time</span>
             )}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {stats.map((st, i) => (
-              <div key={i} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-                <div className={`${st.bg} ${st.color} w-10 h-10 rounded-2xl flex items-center justify-center mb-3`}><st.icon size={20} /></div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{st.label}</p>
+              <div key={i} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`${st.bg} ${st.color} w-9 h-9 rounded-2xl flex items-center justify-center`}><st.icon size={17} /></div>
                   {st.isTempCard && (
                     <div className="flex gap-0.5">
                       {['C','F','K'].map(u => (
@@ -673,82 +684,151 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
                     </div>
                   )}
                 </div>
-                <p className="text-xl font-black mt-1">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">{st.label}</p>
+                <p className="text-2xl font-black text-slate-800 leading-none">
                   {iotLoading
-                    ? <span className="text-slate-300 text-base">...</span>
+                    ? <span className="text-slate-300 text-base">···</span>
                     : st.value != null
                       ? <>{st.value}<span className="text-xs font-semibold text-slate-400 ml-0.5">{st.unit}</span></>
-                      : <span className="text-slate-300">--</span>
-
+                      : <span className="text-slate-300 text-base">--</span>
                   }
                 </p>
-                <span className={`text-[10px] font-bold mt-1 block ${st.statusCls}`}>{st.status}</span>
+                <span className={`text-[10px] font-bold mt-1.5 block ${st.statusCls}`}>{st.status}</span>
               </div>
             ))}
           </div>
 
+          {/* ── Grafik Kesehatan Harian ── */}
           <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-4">
               <div>
-                <h4 className="font-bold text-slate-800">
-                  {axHistory.length >= 2 ? 'Tren Aktivitas (Kalkulasi IoT)' : 'Tren Aktivitas'}
+                <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                  <Activity size={15} className="text-indigo-500" />
+                  Grafik Kesehatan Harian
                 </h4>
-                <p className="text-xs text-slate-400">
-                  {axHistory.length >= 2 ? `${axHistory.length} rekaman · rata-rata akselerasi ${selectedPet.name}` : `Kondisi fisik ${selectedPet.name}`}
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {axHistory.length >= 2
+                    ? `Intensitas aktivitas fisik dari ${axHistory.length} pembacaan IoT · ${selectedPet.name}`
+                    : `Estimasi kondisi fisik harian · ${selectedPet.name}`}
                 </p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                <span className="text-[10px] font-bold text-slate-500 uppercase">
-                  {axHistory.length >= 2 ? 'Kalkulasi' : 'Aktivitas'}
-                </span>
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-500 inline-block" />Aktif</span>
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-400 inline-block" />Normal</span>
+                  <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-slate-200 inline-block" />Istirahat</span>
+                </div>
               </div>
             </div>
-            <div className="flex items-end justify-between gap-3" style={{ height: 192 }}>
-              {bars.map((h, i) => {
-                const isHighlight = axHistory.length >= 2 ? i === bars.length - 1 : i === todayIdx;
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group" style={{ height: '100%' }}>
-                    <div className="w-full bg-slate-50 rounded-2xl overflow-hidden flex flex-col justify-end" style={{ height: 'calc(100% - 20px)' }}>
-                      <div className={`w-full rounded-2xl bar-fill ${isHighlight ? 'bg-indigo-600' : 'bg-indigo-100 group-hover:bg-indigo-200'}`} style={{ height: `${h}%` }} />
+
+            {/* Zone labels */}
+            <div className="relative mb-2">
+              <div className="flex justify-between text-[9px] font-bold text-slate-300 uppercase tracking-wide">
+                <span>Istirahat</span><span>Normal</span><span>Aktif</span>
+              </div>
+            </div>
+
+            {/* Chart area */}
+            <div className="relative" style={{ height: 160 }}>
+              {/* Zone background bands */}
+              <div className="absolute inset-0 flex flex-col rounded-xl overflow-hidden pointer-events-none">
+                <div className="flex-1 bg-indigo-50/40" />      {/* Aktif zone (top 33%) */}
+                <div className="flex-1 bg-emerald-50/40" />     {/* Normal zone (mid 33%) */}
+                <div className="flex-1 bg-slate-50/60" />       {/* Istirahat zone (bottom 33%) */}
+              </div>
+
+              {/* Zone dividers */}
+              <div className="absolute inset-x-0 pointer-events-none" style={{ top: '33%' }}>
+                <div className="border-t border-dashed border-indigo-100 w-full" />
+              </div>
+              <div className="absolute inset-x-0 pointer-events-none" style={{ top: '66%' }}>
+                <div className="border-t border-dashed border-emerald-100 w-full" />
+              </div>
+
+              {/* Bars */}
+              <div className="absolute inset-0 flex items-end justify-between gap-1.5 px-1 pb-0">
+                {bars.map((h, i) => {
+                  const isHighlight = axHistory.length >= 2 ? i === bars.length - 1 : i === todayIdx;
+                  const barColor = h >= 67
+                    ? (isHighlight ? 'bg-indigo-600' : 'bg-indigo-300')
+                    : h >= 34
+                    ? (isHighlight ? 'bg-emerald-500' : 'bg-emerald-300')
+                    : (isHighlight ? 'bg-slate-500' : 'bg-slate-300');
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1 group" style={{ height: '100%' }}>
+                      <div className="w-full flex flex-col justify-end" style={{ height: 'calc(100% - 16px)' }}>
+                        <div
+                          className={`w-full rounded-t-xl transition-all duration-500 ${barColor} ${isHighlight ? 'shadow-sm' : 'group-hover:opacity-80'}`}
+                          style={{ height: `${Math.max(6, h)}%` }}
+                        />
+                      </div>
+                      <span className={`text-[9px] font-bold leading-none ${isHighlight ? 'text-indigo-600' : 'text-slate-400'}`}>
+                        {barLabels[i]}
+                      </span>
                     </div>
-                    <span className={`text-[10px] font-bold ${isHighlight ? 'text-indigo-600' : 'text-slate-400'}`}>{barLabels[i]}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Summary footer */}
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-50">
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const avgBar = bars.reduce((a, b) => a + b, 0) / bars.length;
+                  const actLabel = avgBar >= 67 ? { text: 'Aktif', cls: 'text-indigo-600 bg-indigo-50' }
+                    : avgBar >= 34 ? { text: 'Normal', cls: 'text-emerald-600 bg-emerald-50' }
+                    : { text: 'Kurang Aktif', cls: 'text-slate-500 bg-slate-100' };
+                  return (
+                    <>
+                      <span className={`text-[10px] font-black px-3 py-1 rounded-full ${actLabel.cls}`}>{actLabel.text}</span>
+                      <span className="text-xs text-slate-400">Rata-rata intensitas {Math.round(bars.reduce((a,b)=>a+b,0)/bars.length)}%</span>
+                    </>
+                  );
+                })()}
+              </div>
+              <span className="text-[10px] text-slate-300 font-semibold">
+                {axHistory.length >= 2 ? 'Data IoT' : 'Estimasi'}
+              </span>
             </div>
           </div>
         </div>
 
         <div className="space-y-5">
-          <div className="space-y-3">
-            {(smartTips || [tip]).map((t, idx) => {
-              const TIcon = t.icon;
-              const isUrgent = t.priority === 'urgent';
-              const isHigh = t.priority === 'high';
-              const cardCls = isUrgent
-                ? 'bg-rose-600 shadow-rose-200'
-                : isHigh
-                ? 'bg-amber-500 shadow-amber-200'
-                : 'bg-indigo-600 shadow-indigo-200';
-              return (
-                <div key={idx} className={`${cardCls} p-5 rounded-[28px] text-white shadow-xl relative overflow-hidden`}>
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-2">
-                      <TIcon size={14} className="opacity-80" />
-                      <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">
-                        {isUrgent ? 'Segera Tindak' : isHigh ? 'Perhatian' : 'Tips Hari Ini'}
-                      </span>
+          {/* ── Single Smart Tip ── */}
+          {(() => {
+            const TIcon = tip.icon;
+            const isUrgent = tip.priority === 'urgent';
+            const isHigh = tip.priority === 'high';
+            const cardCls = isUrgent
+              ? 'from-rose-500 to-rose-700'
+              : isHigh
+              ? 'from-amber-500 to-orange-600'
+              : 'from-indigo-500 to-violet-600';
+            const badgeLabel = isUrgent ? 'Segera Tindak' : isHigh ? 'Perhatian' : tip.priority ? 'Rekomendasi' : 'Tips Hari Ini';
+            const badgeSrc = tip.priority ? 'Dari Rekam Medis' : selectedPet.species;
+            return (
+              <div className={`bg-gradient-to-br ${cardCls} p-6 rounded-[28px] text-white shadow-xl relative overflow-hidden`}>
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center">
+                        <TIcon size={15} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80">{badgeLabel}</span>
                     </div>
-                    <h4 className="font-black text-sm mb-1 leading-snug">{t.title}</h4>
-                    <p className="text-[11px] opacity-90 leading-relaxed">{t.body}</p>
+                    <span className="text-[9px] font-bold bg-white/20 px-2 py-1 rounded-full opacity-80">{badgeSrc}</span>
                   </div>
-                  <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
+                  <h4 className="font-black text-base mb-2 leading-snug">{tip.title}</h4>
+                  <p className="text-[11px] opacity-90 leading-relaxed">{tip.body}</p>
                 </div>
-              );
-            })}
-          </div>
+                <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -left-4 -top-4 w-20 h-20 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+              </div>
+            );
+          })()}
 
+          {/* ── Profil Singkat Hewan ── */}
           <div className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm">
             <div className="flex items-center gap-3 mb-4">
               <PetAvatar species={selectedPet.species} size="md" />
@@ -765,17 +845,6 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             ))}
             {selectedPet.notes && <p className="text-xs text-slate-400 mt-3 italic">"{selectedPet.notes}"</p>}
           </div>
-
-          {notifications.filter(n => n.unread).length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-[24px]">
-              <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1">
-                <Bell size={12} /> {notifications.filter(n => n.unread).length} notifikasi baru
-              </p>
-              {notifications.filter(n => n.unread).slice(0, 2).map(n => (
-                <p key={n.id} className="text-xs text-amber-700 py-1 border-b border-amber-100 last:border-0 truncate">{n.text}</p>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -1918,7 +1987,19 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-white border-b border-slate-100 px-6 flex items-center justify-between z-40 shrink-0">
-          <h2 className="text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
+            {/* Banner izin push notifikasi — ditampilkan di header agar tidak ganggu konten */}
+            {'Notification' in window && Notification.permission === 'default' && (
+              <button
+                onClick={() => Notification.requestPermission()}
+                className="hidden sm:flex items-center gap-2 text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-100 transition-colors"
+              >
+                <Bell size={12} />
+                <span>Aktifkan notifikasi jadwal</span>
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <div className="relative" ref={notifRef}>
               <button onClick={() => setShowNotif(!showNotif)}
@@ -1942,21 +2023,6 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {/* Banner izin notifikasi device */}
-          {'Notification' in window && Notification.permission === 'default' && (
-            <div className="max-w-6xl mx-auto mb-4 bg-indigo-50 border border-indigo-200 rounded-2xl px-5 py-3 flex items-center gap-3">
-              <Bell size={16} className="text-indigo-600 shrink-0" />
-              <p className="text-xs text-indigo-800 font-semibold flex-1">
-                Aktifkan notifikasi perangkat agar dapat pengingat jadwal langsung di device kamu
-              </p>
-              <button
-                onClick={() => Notification.requestPermission()}
-                className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-colors shrink-0"
-              >
-                Aktifkan
-              </button>
-            </div>
-          )}
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
               {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} />}
