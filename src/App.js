@@ -1049,7 +1049,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   const TipIcon = tip.icon;
 
   return (
-    <div className="space-y-6 anim-slide-up">
+    <div className="space-y-6">
 
       {/* ── Streak Card (Basic) ── */}
       {(profile?.role === 'Basic' || !profile?.role) && (() => {
@@ -1544,7 +1544,7 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
   const selType = SCHEDULE_TYPES.find(t => t.type === form.type) || SCHEDULE_TYPES[0];
 
   return (
-    <div className="anim-slide-up">
+    <div className="">
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -1726,7 +1726,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
   const getPet = (id) => (pets || []).find(p => p.id === id);
 
   return (
-    <div className="anim-slide-up">
+    <div className="">
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -1960,7 +1960,7 @@ const TipsPage = ({ selectedPet, records }) => {
   const hasPersonalized = smartTips && smartTips.some(t => t.priority);
 
   return (
-    <div className="anim-slide-up">
+    <div className="">
       <h3 className="text-xl font-black text-slate-800 mb-2">Tips Perawatan</h3>
       <p className="text-sm text-slate-500 mb-6">Panduan merawat hewan peliharaan dengan baik</p>
       <div className="flex gap-2 mb-6 flex-wrap">
@@ -2068,7 +2068,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
   const psi = pushStatusInfo[pushPermission] || pushStatusInfo.unsupported;
 
   return (
-    <div className="anim-slide-up">
+    <div className="">
       <h3 className="text-xl font-black text-slate-800 mb-6">Pengaturan</h3>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1 space-y-1.5">
@@ -2456,7 +2456,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
   const spo2St = getSpO2Status(latest?.spo2);
 
   return (
-    <div className="space-y-6 anim-slide-up">
+    <div className="space-y-6">
 
       {/* Pet Selector */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -2490,7 +2490,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <p className={`font-black text-lg ${isKandang ? "text-amber-800" : "text-indigo-800"}`}>
+              <p className={`font-black text-lg ${isKandang ? "text-amber-700" : "text-indigo-700"}`}>
                 Mode {isKandang ? "Kandang" : "Kalung"}
               </p>
               {/* Badge sumber mode */}
@@ -2741,7 +2741,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
                   ].map(([sp, suhu, hr, spo2], idx) => {
                     const isSelected = selectedPet?.species === sp;
                     return (
-                      <tr key={sp} className={`border-t border-slate-50 ${isSelected ? 'bg-indigo-50' : idx % 2 === 0 ? '' : 'bg-slate-50/50'}`}>
+                      <tr key={sp} className={`transition-colors ${isSelected ? 'bg-indigo-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
                         <td className="p-3 font-bold text-slate-700 flex items-center gap-1.5">
                           {isSelected && <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full inline-block" />}
                           {sp}
@@ -3048,8 +3048,12 @@ export default function App() {
   const unreadCount = notifications.filter(n => n.unread).length;
   const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
+  // Launch animation: only once per session (not on every reload)
+  const isFirstLaunch = !sessionStorage.getItem('petcare_launched');
+  if (isFirstLaunch) sessionStorage.setItem('petcare_launched', '1');
+
   return (
-    <div data-dark={darkMode ? "true" : undefined} className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
+    <div data-dark={darkMode ? "true" : undefined} className={`flex h-screen bg-slate-50 text-slate-900 overflow-hidden${isFirstLaunch ? ' anim-launch' : ''}`}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* PWA Install Modal */}
@@ -3157,13 +3161,20 @@ export default function App() {
           )}
         </div>
 
-        <nav className="md:hidden flex bg-white border-t border-slate-100 px-2 py-2 shrink-0">
+        <nav className="md:hidden flex bg-white border-t border-slate-100 px-2 py-2 shrink-0 items-center">
           {NAV.map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
               className={`flex-1 flex flex-col items-center gap-1 py-1 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
               <item.icon size={19} /><span className="text-[9px] font-bold">{item.label}</span>
             </button>
           ))}
+          <button onClick={handlePanggilDokter}
+            className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all text-rose-500 active:scale-95">
+            <div className="w-8 h-8 bg-rose-500 rounded-full flex items-center justify-center shadow-md shadow-rose-200">
+              <Phone size={15} className="text-white" />
+            </div>
+            <span className="text-[9px] font-bold text-rose-500">Darurat</span>
+          </button>
         </nav>
       </main>
 
