@@ -780,31 +780,24 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             const col = PET_COLORS[pet.species] || PET_COLORS['Kucing'];
             const active = selectedPet.id === pet.id;
             return (
-              <div key={pet.id} className="flex items-center gap-1 shrink-0">
-                <button onClick={() => { setSelectedPet(pet); if (editPetId && editPetId !== pet.id) setEditPetId(null); }}
-                  className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border-2 transition-all duration-200 ${active ? 'border-indigo-500 bg-indigo-50 shadow-md' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}>
+              <div key={pet.id} className="shrink-0">
+                <div onClick={() => { setSelectedPet(pet); if (editPetId && editPetId !== pet.id) setEditPetId(null); }}
+                  className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl border-2 transition-all duration-200 cursor-pointer ${active ? 'border-indigo-500 bg-indigo-50 shadow-md' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}>
                   <div className={`w-8 h-8 ${col.bg} rounded-xl flex items-center justify-center shrink-0`}>
                     <PetIcon size={16} className={col.text} />
                   </div>
                   <div className="text-left">
                     <p className={`text-sm font-bold leading-none ${active ? 'text-indigo-700' : 'text-slate-700'}`}>{pet.name}</p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{pet.species}</p>
+                    {active && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setEditPetId(editPetId === pet.id ? null : pet.id); setPetForm({ ...pet }); }}
+                        className={`mt-1 flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-lg border transition-all ${editPetId === pet.id ? 'bg-indigo-100 text-indigo-600 border-indigo-200' : 'bg-white hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 border-slate-200'}`}>
+                        <Edit3 size={10} /> Edit
+                      </button>
+                    )}
                   </div>
-                </button>
-                {active && (
-                  <>
-                    <button
-                      onClick={() => { setEditPetId(editPetId === pet.id ? null : pet.id); setPetForm({ ...pet }); }}
-                      className={`p-2 rounded-xl border transition-all ${editPetId === pet.id ? 'bg-indigo-100 text-indigo-600 border-indigo-200' : 'bg-white hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 border-slate-100'}`}>
-                      <Edit3 size={13} />
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(pet.id)}
-                      className="p-2 bg-white hover:bg-rose-50 text-slate-300 hover:text-rose-500 rounded-xl border border-slate-100 transition-all">
-                      <Trash2 size={13} />
-                    </button>
-                  </>
-                )}
+                </div>
               </div>
             );
           })}
@@ -836,9 +829,12 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
               <div><label className="label-style">Warna</label><input type="text" value={petForm.color || ''} onChange={e => setPetForm({ ...petForm, color: e.target.value })} className="input-style" /></div>
             </div>
             <div className="mt-3"><label className="label-style">Catatan</label><textarea value={petForm.notes || ''} onChange={e => setPetForm({ ...petForm, notes: e.target.value })} rows={2} className="input-style resize-none" /></div>
-            <div className="mt-4">
-              <button onClick={savePetDash} disabled={petSaving} className="w-full py-2.5 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 flex items-center justify-center gap-2 disabled:opacity-60">
+            <div className="mt-4 flex gap-2">
+              <button onClick={savePetDash} disabled={petSaving} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 flex items-center justify-center gap-2 disabled:opacity-60">
                 {petSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Simpan Perubahan
+              </button>
+              <button onClick={() => setDeleteConfirm(editPetId)} className="py-2.5 px-4 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl border border-slate-200 transition-all flex items-center gap-1.5 text-sm font-semibold">
+                <Trash2 size={14} /> Hapus
               </button>
             </div>
           </div>
@@ -2196,7 +2192,8 @@ export default function App() {
   const handleAddPet = async (form) => {
     setPetLoading(true);
     try {
-      const newPet = await petService.create(session.user.id, form);
+      const { age_unit, ...petData } = form; // strip age_unit — not a DB column
+      const newPet = await petService.create(session.user.id, petData);
       setPets(prev => [...prev, newPet]);
       setSelectedPet(newPet);
       await addNotif(session.user.id, { text: `${form.name} berhasil didaftarkan!`, type: 'success', pet_id: newPet.id });
