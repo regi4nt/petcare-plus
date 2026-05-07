@@ -7,7 +7,8 @@ import {
   ToggleLeft, ToggleRight, Phone, Mail, Lock, Eye, EyeOff, Check,
   FileText, Pill, Stethoscope, Syringe, Droplets,
   UtensilsCrossed, Dumbbell, LucideStar, Info, BookOpen, Loader2,
-  Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint, Moon, Sun
+  Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint, Moon, Sun,
+  Download, Smartphone, Monitor, Share2, ArrowDown, MoreHorizontal, Chrome
 } from 'lucide-react';
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService } from './lib/api';
 
@@ -361,6 +362,282 @@ const Spinner = ({ text = 'Memuat...' }) => (
     <p className="text-sm font-medium">{text}</p>
   </div>
 );
+
+// ─── PWA INSTALL LOGIC ────────────────────────────────────────────────
+
+const usePWAInstall = () => {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [platform, setPlatform] = useState('unknown'); // 'ios' | 'android' | 'desktop' | 'installed'
+
+  useEffect(() => {
+    // Detect if already installed as PWA
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+    if (isStandalone) { setIsInstalled(true); setPlatform('installed'); return; }
+
+    // Detect platform
+    const ua = navigator.userAgent.toLowerCase();
+    if (/iphone|ipad|ipod/.test(ua)) setPlatform('ios');
+    else if (/android/.test(ua)) setPlatform('android');
+    else setPlatform('desktop');
+
+    // Listen for Chrome/Edge install prompt
+    const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+
+    // Listen for app installed
+    window.addEventListener('appinstalled', () => { setIsInstalled(true); setDeferredPrompt(null); });
+
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const triggerInstall = async () => {
+    if (!deferredPrompt) return false;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+    if (outcome === 'accepted') setIsInstalled(true);
+    return outcome === 'accepted';
+  };
+
+  return { deferredPrompt, isInstalled, platform, triggerInstall };
+};
+
+// ─── PWA INSTALL MODAL (new user onboarding) ──────────────────────────
+const PWAInstallModal = ({ onDismiss, platform, deferredPrompt, triggerInstall }) => {
+  const [step, setStep] = useState('main'); // 'main' | 'ios-steps' | 'android-steps' | 'desktop-steps'
+  const [installing, setInstalling] = useState(false);
+
+  const handleNativeInstall = async () => {
+    if (deferredPrompt) {
+      setInstalling(true);
+      await triggerInstall();
+      setInstalling(false);
+      onDismiss();
+    } else {
+      setStep(platform === 'ios' ? 'ios-steps' : platform === 'android' ? 'android-steps' : 'desktop-steps');
+    }
+  };
+
+  const PlatformIcon = platform === 'ios' || platform === 'android' ? Smartphone : Monitor;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm anim-zoom">
+      <div className="w-full max-w-sm bg-white rounded-[32px] shadow-2xl overflow-hidden">
+
+        {step === 'main' && (
+          <>
+            {/* Hero */}
+            <div className="bg-gradient-to-br from-indigo-600 to-violet-600 p-8 text-center relative overflow-hidden">
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute top-4 left-4 w-24 h-24 rounded-full bg-white/30 blur-xl" />
+                <div className="absolute bottom-4 right-4 w-32 h-32 rounded-full bg-white/20 blur-2xl" />
+              </div>
+              <div className="relative">
+                <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  <PawPrint size={36} className="text-white" />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-1">Selamat Datang!</h2>
+                <p className="text-indigo-200 text-sm font-medium">Instal PetCare+ untuk pengalaman terbaik</p>
+              </div>
+            </div>
+
+            {/* Benefits */}
+            <div className="p-6">
+              <div className="space-y-3 mb-6">
+                {[
+                  { icon: '⚡', title: 'Akses Lebih Cepat', desc: 'Buka langsung dari home screen tanpa browser' },
+                  { icon: '🔔', title: 'Notifikasi Jadwal', desc: 'Reminder vaksin & perawatan hewan kamu' },
+                  { icon: '📡', title: 'Monitor IoT Real-time', desc: 'Pantau vital sign hewan kapan saja' },
+                ].map(b => (
+                  <div key={b.title} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
+                    <span className="text-2xl w-10 text-center">{b.icon}</span>
+                    <div>
+                      <p className="font-bold text-slate-800 text-sm">{b.title}</p>
+                      <p className="text-xs text-slate-500">{b.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={handleNativeInstall} disabled={installing}
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/30 text-base">
+                {installing
+                  ? <><Loader2 size={18} className="animate-spin" /> Menginstal...</>
+                  : <><Download size={18} /> Instal Sekarang</>}
+              </button>
+
+              <button onClick={onDismiss}
+                className="w-full py-3 mt-2 text-sm text-slate-400 hover:text-slate-600 font-medium transition-colors">
+                Nanti saja
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'ios-steps' && (
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <button onClick={() => setStep('main')} className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center">
+                <ChevronRight size={16} className="text-slate-600 rotate-180" />
+              </button>
+              <h3 className="font-black text-slate-800">Instal di iPhone / iPad</h3>
+            </div>
+            <div className="space-y-4">
+              {[
+                { n: 1, icon: <Share2 size={20} className="text-blue-500" />, text: 'Tap tombol Share (kotak dengan panah atas) di bagian bawah Safari' },
+                { n: 2, icon: <Plus size={20} className="text-blue-500" />, text: 'Gulir ke bawah dan tap "Add to Home Screen"' },
+                { n: 3, icon: <Check size={20} className="text-blue-500" />, text: 'Tap "Add" di pojok kanan atas untuk mengkonfirmasi' },
+              ].map(s => (
+                <div key={s.n} className="flex gap-4 items-start">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0">{s.icon}</div>
+                  <div className="flex-1 pt-1">
+                    <span className="text-xs font-black text-blue-500 uppercase tracking-wide">Langkah {s.n}</span>
+                    <p className="text-sm text-slate-700 font-medium mt-0.5">{s.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 p-4 bg-blue-50 rounded-2xl text-xs text-blue-700 font-medium">
+              💡 Pastikan kamu menggunakan browser <strong>Safari</strong> di iPhone/iPad
+            </div>
+            <button onClick={onDismiss} className="w-full py-3 mt-4 bg-indigo-600 text-white font-bold rounded-2xl text-sm">
+              Mengerti, terima kasih!
+            </button>
+          </div>
+        )}
+
+        {step === 'android-steps' && (
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <button onClick={() => setStep('main')} className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center">
+                <ChevronRight size={16} className="text-slate-600 rotate-180" />
+              </button>
+              <h3 className="font-black text-slate-800">Instal di Android</h3>
+            </div>
+            <div className="space-y-4">
+              {[
+                { n: 1, icon: <MoreHorizontal size={20} className="text-emerald-500" />, text: 'Tap ikon tiga titik (⋮) di pojok kanan atas Chrome' },
+                { n: 2, icon: <ArrowDown size={20} className="text-emerald-500" />, text: 'Pilih "Tambahkan ke layar utama" atau "Install app"' },
+                { n: 3, icon: <Check size={20} className="text-emerald-500" />, text: 'Tap "Tambahkan" untuk mengkonfirmasi instalasi' },
+              ].map(s => (
+                <div key={s.n} className="flex gap-4 items-start">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">{s.icon}</div>
+                  <div className="flex-1 pt-1">
+                    <span className="text-xs font-black text-emerald-500 uppercase tracking-wide">Langkah {s.n}</span>
+                    <p className="text-sm text-slate-700 font-medium mt-0.5">{s.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 p-4 bg-emerald-50 rounded-2xl text-xs text-emerald-700 font-medium">
+              💡 Gunakan browser <strong>Chrome</strong> atau <strong>Edge</strong> di Android untuk hasil terbaik
+            </div>
+            <button onClick={onDismiss} className="w-full py-3 mt-4 bg-indigo-600 text-white font-bold rounded-2xl text-sm">
+              Mengerti, terima kasih!
+            </button>
+          </div>
+        )}
+
+        {step === 'desktop-steps' && (
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <button onClick={() => setStep('main')} className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center">
+                <ChevronRight size={16} className="text-slate-600 rotate-180" />
+              </button>
+              <h3 className="font-black text-slate-800">Instal di Desktop</h3>
+            </div>
+            <div className="space-y-4">
+              {[
+                { n: 1, icon: <Download size={20} className="text-violet-500" />, text: 'Cari ikon instal (⊕) di address bar browser kamu' },
+                { n: 2, icon: <Monitor size={20} className="text-violet-500" />, text: 'Klik ikon tersebut lalu pilih "Install PetCare+"' },
+                { n: 3, icon: <Check size={20} className="text-violet-500" />, text: 'Klik "Install" untuk mengkonfirmasi — aplikasi akan terbuka terpisah' },
+              ].map(s => (
+                <div key={s.n} className="flex gap-4 items-start">
+                  <div className="w-10 h-10 rounded-2xl bg-violet-50 flex items-center justify-center shrink-0">{s.icon}</div>
+                  <div className="flex-1 pt-1">
+                    <span className="text-xs font-black text-violet-500 uppercase tracking-wide">Langkah {s.n}</span>
+                    <p className="text-sm text-slate-700 font-medium mt-0.5">{s.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 p-4 bg-violet-50 rounded-2xl text-xs text-violet-700 font-medium">
+              💡 Didukung di <strong>Chrome</strong>, <strong>Edge</strong>, dan <strong>Opera</strong>
+            </div>
+            <button onClick={onDismiss} className="w-full py-3 mt-4 bg-indigo-600 text-white font-bold rounded-2xl text-sm">
+              Mengerti, terima kasih!
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── PWA INSTALL BUTTON (manual trigger in Settings) ──────────────────
+const PWAInstallButton = ({ platform, deferredPrompt, triggerInstall, isInstalled }) => {
+  const [showGuide, setShowGuide] = useState(false);
+  const [installing, setInstalling] = useState(false);
+
+  if (isInstalled) {
+    return (
+      <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+        <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center shrink-0">
+          <CheckCircle2 size={18} className="text-emerald-600" />
+        </div>
+        <div>
+          <p className="font-bold text-emerald-800 text-sm">Sudah Terinstal</p>
+          <p className="text-xs text-emerald-600">PetCare+ berjalan sebagai aplikasi</p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      setInstalling(true);
+      await triggerInstall();
+      setInstalling(false);
+    } else {
+      setShowGuide(true);
+    }
+  };
+
+  return (
+    <>
+      <button onClick={handleInstall} disabled={installing}
+        className="w-full flex items-center gap-3 p-4 bg-indigo-600 hover:bg-indigo-700 rounded-2xl transition-all shadow-md shadow-indigo-500/20">
+        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
+          {platform === 'ios' || platform === 'android'
+            ? <Smartphone size={18} className="text-white" />
+            : <Monitor size={18} className="text-white" />}
+        </div>
+        <div className="text-left flex-1">
+          <p className="font-bold text-white text-sm">
+            {installing ? 'Menginstal...' : 'Instal PetCare+'}
+          </p>
+          <p className="text-xs text-indigo-200">
+            {platform === 'ios' ? 'Tambahkan ke Home Screen (iOS)'
+              : platform === 'android' ? 'Instal di Android'
+              : 'Instal di Desktop'}
+          </p>
+        </div>
+        {installing ? <Loader2 size={16} className="text-white animate-spin" /> : <Download size={16} className="text-white" />}
+      </button>
+
+      {showGuide && (
+        <PWAInstallModal
+          platform={platform}
+          deferredPrompt={null}
+          triggerInstall={triggerInstall}
+          onDismiss={() => setShowGuide(false)}
+        />
+      )}
+    </>
+  );
+};
 
 // ─── AUTH PAGE ────────────────────────────────────────────────────────
 const AuthPage = () => {
@@ -1745,7 +2022,7 @@ const TipsPage = ({ selectedPet, records }) => {
 };
 
 // ─── SETTINGS PAGE ────────────────────────────────────────────────────
-const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet, darkMode, onToggleDark, notifSettings, onSaveNotifSettings }) => {
+const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet, darkMode, onToggleDark, notifSettings, onSaveNotifSettings, pwaInstall }) => {
   const [section, setSection] = useState('profile');
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: profile?.name || '', phone: profile?.phone || '' });
@@ -1779,7 +2056,6 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
   const sections = [
     { id: 'profile',       label: 'Edit Profil',  icon: User },
     { id: 'notifications', label: 'Notifikasi',   icon: Bell },
-    { id: 'tampilan',      label: 'Tampilan',     icon: Settings },
     { id: 'app',           label: 'Tentang',      icon: Info },
   ];
 
@@ -1914,78 +2190,26 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             </div>
           )}
 
-          {/* ── TAMPILAN (DARK MODE) ── */}
-          {section === 'tampilan' && (
-            <div className="space-y-4">
-              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-                <h4 className="font-bold text-slate-800 mb-1">Mode Tampilan</h4>
-                <p className="text-xs text-slate-500 mb-5">Pilih tema tampilan aplikasi sesuai preferensi.</p>
 
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Light mode card */}
-                  <button onClick={() => darkMode && onToggleDark()}
-                    className={`relative p-5 rounded-2xl border-2 text-left transition-all ${!darkMode ? 'border-indigo-500 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
-                    {!darkMode && (
-                      <div className="absolute top-3 right-3 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center">
-                        <CheckCircle2 size={12} className="text-white" />
-                      </div>
-                    )}
-                    <div className="w-full h-16 bg-slate-50 rounded-xl mb-3 border border-slate-100 flex flex-col justify-center px-3 gap-1.5">
-                      <div className="h-2 bg-white rounded-full w-3/4 border border-slate-100" />
-                      <div className="h-1.5 bg-slate-200 rounded-full w-1/2" />
-                    </div>
-                    <p className="font-bold text-slate-800 text-sm">Terang</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Tampilan default putih</p>
-                  </button>
-
-                  {/* Dark mode card */}
-                  <button onClick={() => !darkMode && onToggleDark()}
-                    className={`relative p-5 rounded-2xl border-2 text-left transition-all ${darkMode ? 'border-indigo-500 shadow-md' : 'border-slate-200 hover:border-slate-300'}`}>
-                    {darkMode && (
-                      <div className="absolute top-3 right-3 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center">
-                        <CheckCircle2 size={12} className="text-white" />
-                      </div>
-                    )}
-                    <div className="w-full h-16 bg-slate-800 rounded-xl mb-3 border border-slate-700 flex flex-col justify-center px-3 gap-1.5">
-                      <div className="h-2 bg-slate-600 rounded-full w-3/4" />
-                      <div className="h-1.5 bg-slate-700 rounded-full w-1/2" />
-                    </div>
-                    <p className="font-bold text-slate-800 text-sm">Gelap</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Ramah mata di malam hari</p>
-                  </button>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${darkMode ? 'bg-slate-700 text-slate-300' : 'bg-amber-50 text-amber-500'}`}>
-                      {darkMode ? <Moon size={16} /> : <Sun size={16} />}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-800 text-sm">Mode Gelap</p>
-                      <p className="text-xs text-slate-500">{darkMode ? 'Aktif — tampilan gelap digunakan' : 'Nonaktif — tampilan terang digunakan'}</p>
-                    </div>
-                  </div>
-                  <button onClick={onToggleDark} className="transition-colors ml-3 shrink-0">
-                    {darkMode
-                      ? <ToggleRight size={34} className="text-indigo-600" />
-                      : <ToggleLeft size={34} className="text-slate-300" />
-                    }
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-3 text-center">Preferensi disimpan otomatis di perangkat ini</p>
-              </div>
-            </div>
-          )}
 
           {/* ── TENTANG ── */}
           {section === 'app' && (
-            <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-              <h4 className="font-bold text-slate-800 mb-4">Tentang Aplikasi</h4>
+            <div className="space-y-4">
+              {pwaInstall && (
+                <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                  <h4 className="font-bold text-slate-800 mb-1">Instal Aplikasi</h4>
+                  <p className="text-xs text-slate-500 mb-4">Tambahkan PetCare+ ke layar utama untuk akses lebih cepat.</p>
+                  <PWAInstallButton {...pwaInstall} />
+                </div>
+              )}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <h4 className="font-bold text-slate-800 mb-4">Tentang Aplikasi</h4>
               {[['Versi', '2.0.0'], ['Framework', 'React 18'], ['Database', 'Supabase PostgreSQL'], ['Auth', 'Supabase Auth'], ['Hosting', 'Vercel']].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-2.5 border-b border-slate-50 last:border-0">
                   <span className="text-sm text-slate-500">{k}</span><span className="text-sm font-bold text-slate-800">{v}</span>
                 </div>
               ))}
+            </div>
             </div>
           )}
 
@@ -2607,6 +2831,10 @@ export default function App() {
     });
   }, []);
 
+  // ── PWA Install ───────────────────────────────────────────────────────
+  const { deferredPrompt, isInstalled, platform, triggerInstall } = usePWAInstall();
+  const [showPWAModal, setShowPWAModal] = useState(false);
+
   // ── Notification settings (App level so hook + Dashboard can read them) ─
   const NOTIF_DEFAULTS = { jadwal: true, kesehatan: true, tips: true, vaksinasi: true };
   const [notifSettings, setNotifSettings] = useState(() => {
@@ -2663,6 +2891,11 @@ export default function App() {
       setSchedules(scheds);
       setRecords(recs);
       setNotifications(notifs);
+      // Show PWA install modal for new users
+      if (!isInstalled && !localStorage.getItem('petcare_pwa_dismissed')) {
+        const isNewUser = !prof || (prof.login_streak || 0) <= 1;
+        if (isNewUser) setTimeout(() => setShowPWAModal(true), 1500);
+      }
       // Update streak harian (hanya Basic)
       if (prof?.role === 'Basic' || !prof?.role) {
         profileService.updateStreak(uid)
@@ -2819,7 +3052,18 @@ export default function App() {
     <div data-dark={darkMode ? "true" : undefined} className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Sidebar */}
+      {/* PWA Install Modal */}
+      {showPWAModal && (
+        <PWAInstallModal
+          platform={platform}
+          deferredPrompt={deferredPrompt}
+          triggerInstall={triggerInstall}
+          onDismiss={() => {
+            setShowPWAModal(false);
+            localStorage.setItem('petcare_pwa_dismissed', 'true');
+          }}
+        />
+      )}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 p-5 shrink-0">
         <div className="flex items-center gap-3 mb-8">
           <img src="/logo.svg" alt="PetCare+" className="w-10 h-10 rounded-xl shadow-md shadow-indigo-200" />
@@ -2833,6 +3077,19 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {/* PWA Install Prompt (sidebar) */}
+        {!isInstalled && (
+          <button onClick={() => setShowPWAModal(true)}
+            className="mx-0 mb-3 w-full flex items-center gap-2.5 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-2xl transition-all group">
+            <div className="w-7 h-7 bg-indigo-600 rounded-xl flex items-center justify-center shrink-0">
+              <Download size={13} className="text-white" />
+            </div>
+            <div className="text-left flex-1 min-w-0">
+              <p className="text-xs font-bold text-indigo-700 leading-tight">Instal Aplikasi</p>
+              <p className="text-[10px] text-indigo-500 leading-tight">Akses lebih cepat</p>
+            </div>
+          </button>
+        )}
         <div className="mt-4 p-4 bg-slate-900 rounded-3xl text-white">
           <p className="text-[10px] text-slate-400 mb-1 font-bold uppercase tracking-widest">Darurat</p>
           <p className="text-xs font-bold mb-3">Butuh bantuan medis segera?</p>
@@ -2895,7 +3152,7 @@ export default function App() {
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} />}
-              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} />}
+              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} />}
             </div>
           )}
         </div>
