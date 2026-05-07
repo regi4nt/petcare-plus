@@ -6,7 +6,7 @@ import {
   ToggleLeft, ToggleRight, Phone, Mail, Lock, Eye, EyeOff, Check,
   FileText, Pill, Stethoscope, Syringe, Droplets,
   UtensilsCrossed, Dumbbell, LucideStar, Info, BookOpen, Loader2,
-  Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag
+  Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint
 } from 'lucide-react';
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService } from './lib/api';
 
@@ -543,13 +543,28 @@ const getIotHealthTip = (score, iotCalc, petName) => {
 };
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────
-const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records, onAlert }) => {
+const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records, onAlert, onUpdatePet, onDeletePet }) => {
   const [iotCalc, setIotCalc]         = useState(null);
   const [dailyHealth, setDailyHealth] = useState([]);
   const [iotLoading, setIotLoading]   = useState(false);
   const [tempUnit, setTempUnit]       = useState('C'); // 'C' | 'F' | 'K'
   const [iotHealthTip, setIotHealthTip] = useState(null); // tip override dari kondisi IoT
   const alertedScoreRef = useRef(null); // simpan skor terakhir yang sudah dinotif agar tidak spam
+
+  // ── State Kelola Hewan ─────────────────────────────────────────────
+  const [editPetId, setEditPetId]     = useState(null);
+  const [petForm, setPetForm]         = useState({});
+  const [petSaving, setPetSaving]     = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  // ── State Tips Panel ───────────────────────────────────────────────
+  const [tipsSpecies, setTipsSpecies] = useState(selectedPet?.species || 'Kucing');
+  const [showTipsPanel, setShowTipsPanel] = useState(false);
+
+  const savePetDash = async () => {
+    setPetSaving(true);
+    try { await onUpdatePet(editPetId, petForm); setEditPetId(null); } finally { setPetSaving(false); }
+  };
 
   // ── Konversi suhu ─────────────────────────────────────────────────
   const convertTemp = (celsius, unit) => {
@@ -949,6 +964,176 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
           </div>
         </div>
       </div>
+
+      {/* ── TIPS PERAWATAN SECTION ── */}
+      <section className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-50">
+          <div className="flex items-center gap-2">
+            <BookOpen size={16} className="text-indigo-500" />
+            <h3 className="font-black text-slate-800">Tips Perawatan</h3>
+            <span className="text-[10px] bg-indigo-50 text-indigo-600 font-bold px-2 py-0.5 rounded-full">Panduan</span>
+          </div>
+          <button
+            onClick={() => setShowTipsPanel(!showTipsPanel)}
+            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+          >
+            {showTipsPanel ? 'Sembunyikan' : 'Lihat Semua'}
+            <ChevronDown size={13} className={`transition-transform ${showTipsPanel ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        <div className="px-6 py-4">
+          {/* Species filter chips */}
+          <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
+            {Object.keys(TIPS_DB).map(s => {
+              const Icon = PET_ICONS[s]; const col = PET_COLORS[s];
+              return (
+                <button key={s} onClick={() => setTipsSpecies(s)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${tipsSpecies === s ? 'bg-indigo-600 text-white shadow-md' : `${col.bg} ${col.text}`}`}>
+                  <Icon size={12} />{s}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Personalized tips jika ada */}
+          {(() => {
+            const activePet = selectedPet?.species === tipsSpecies ? selectedPet : null;
+            const smart = activePet ? getSmartTips(activePet, records) : null;
+            const personalized = smart?.filter(t => t.priority) || [];
+            if (personalized.length === 0) return null;
+            return (
+              <div className="mb-4">
+                <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-1">
+                  <Stethoscope size={11} /> Rekomendasi untuk {activePet?.name}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {personalized.map((tip, i) => {
+                    const Icon = tip.icon;
+                    const cardCls = tip.priority === 'urgent' ? 'from-rose-500 to-rose-700' : tip.priority === 'high' ? 'from-amber-500 to-orange-600' : 'from-indigo-500 to-violet-600';
+                    return (
+                      <div key={i} className={`bg-gradient-to-br ${cardCls} p-4 rounded-[20px] text-white shadow-lg`}>
+                        <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center mb-2"><Icon size={15} /></div>
+                        <h4 className="font-black text-sm mb-1">{tip.title}</h4>
+                        <p className="text-[11px] opacity-90 leading-relaxed">{tip.body}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="h-px bg-slate-100 my-4" />
+              </div>
+            );
+          })()}
+
+          {/* Tips grid — tampilkan 2 atau semua */}
+          {(() => {
+            const tips = TIPS_DB[tipsSpecies] || TIPS_DB['Kucing'];
+            const gradients = ['from-indigo-500 to-violet-600', 'from-emerald-500 to-teal-600', 'from-amber-500 to-orange-600', 'from-rose-500 to-pink-600', 'from-sky-500 to-blue-600'];
+            const shown = showTipsPanel ? tips : tips.slice(0, 2);
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {shown.map((tip, i) => {
+                  const Icon = tip.icon;
+                  return (
+                    <div key={i} className={`bg-gradient-to-br ${gradients[i % gradients.length]} p-5 rounded-[22px] text-white shadow-md hover:-translate-y-0.5 transition-all`}>
+                      <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center mb-3"><Icon size={17} /></div>
+                      <h4 className="font-black text-sm mb-1.5">{tip.title}</h4>
+                      <p className="text-[11px] opacity-90 leading-relaxed">{tip.body}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      </section>
+
+      {/* ── KELOLA HEWAN SECTION ── */}
+      <section className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-50">
+          <div className="flex items-center gap-2">
+            <PawPrint size={16} className="text-indigo-500" />
+            <h3 className="font-black text-slate-800">Kelola Hewan</h3>
+            <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">{pets.length} hewan</span>
+          </div>
+          <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
+            <Plus size={12} /> Tambah
+          </button>
+        </div>
+
+        <div className="px-6 py-4 space-y-3">
+          {pets.length === 0 && (
+            <div className="text-center py-10 text-slate-400">
+              <Cat size={36} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Belum ada hewan terdaftar</p>
+            </div>
+          )}
+          {pets.map(pet => (
+            <div key={pet.id} className="bg-slate-50 rounded-[20px] border border-slate-100 p-4">
+              {editPetId === pet.id ? (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-bold text-slate-800">Edit {pet.name}</h4>
+                    <button onClick={() => setEditPetId(null)} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-400"><X size={16} /></button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[['Nama', 'name', 'text'], ['Ras', 'breed', 'text']].map(([l, k, t]) => (
+                      <div key={k}><label className="label-style">{l}</label><input type={t} value={petForm[k] || ''} onChange={e => setPetForm({ ...petForm, [k]: e.target.value })} className="input-style" /></div>
+                    ))}
+                    <div>
+                      <label className="label-style">Usia</label>
+                      <input type="text" inputMode="decimal" placeholder="2 = 2th, 3,5 = 3,5mgg"
+                        value={petForm.age || ''}
+                        onChange={e => { const raw = e.target.value; const hasDecimal = raw.replace(',','.').includes('.'); setPetForm({ ...petForm, age: raw, age_unit: hasDecimal ? 'minggu' : 'tahun' }); }}
+                        className="input-style" />
+                      {petForm.age != null && petForm.age !== '' && (
+                        <p className="text-[10px] mt-1 font-semibold text-indigo-500">\u2192 {String(petForm.age).replace(',','.')} {petForm.age_unit || 'tahun'}</p>
+                      )}
+                    </div>
+                    <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={petForm.weight || ''} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} className="input-style" /></div>
+                    <div><label className="label-style">Gender</label><select value={petForm.gender || 'Jantan'} onChange={e => setPetForm({ ...petForm, gender: e.target.value })} className="input-style"><option>Jantan</option><option>Betina</option></select></div>
+                    <div><label className="label-style">Warna</label><input type="text" value={petForm.color || ''} onChange={e => setPetForm({ ...petForm, color: e.target.value })} className="input-style" /></div>
+                  </div>
+                  <div className="mt-3"><label className="label-style">Catatan</label><textarea value={petForm.notes || ''} onChange={e => setPetForm({ ...petForm, notes: e.target.value })} rows={2} className="input-style resize-none" /></div>
+                  <div className="flex gap-3 mt-4">
+                    <button onClick={savePetDash} disabled={petSaving} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 flex items-center justify-center gap-2 disabled:opacity-60">
+                      {petSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Simpan
+                    </button>
+                    <button onClick={() => setDeleteConfirm(pet.id)} className="py-2.5 px-4 bg-rose-50 text-rose-500 rounded-2xl font-bold hover:bg-rose-100 transition-colors"><Trash2 size={15} /></button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <PetAvatar species={pet.species} size="md" />
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-800">{pet.name}</p>
+                    <p className="text-xs text-slate-500">{pet.species} · {pet.breed} · {formatAge(pet.age, pet.age_unit)} · {formatWeight(pet.weight)} kg</p>
+                  </div>
+                  <button onClick={() => { setEditPetId(pet.id); setPetForm({ ...pet }); }}
+                    className="p-2.5 bg-white hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl border border-slate-100 transition-all">
+                    <Edit3 size={15} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Delete confirm modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[28px] p-6 max-w-sm w-full shadow-2xl anim-zoom text-center">
+            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={22} className="text-rose-500" /></div>
+            <h4 className="font-black text-slate-800 text-lg mb-2">Hapus Hewan?</h4>
+            <p className="text-sm text-slate-500 mb-6">Data akan dihapus permanen dari database.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-sm">Batal</button>
+              <button onClick={async () => { await onDeletePet(deleteConfirm); setDeleteConfirm(null); setEditPetId(null); }} className="flex-1 py-3 bg-rose-500 text-white rounded-2xl font-bold text-sm hover:bg-rose-600">Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2255,12 +2440,11 @@ export default function App() {
     { id: 'monitor',   icon: Cpu,             label: 'Monitor IoT' },
     { id: 'schedule',  icon: Calendar,         label: 'Jadwal' },
     { id: 'medical',   icon: FileText,         label: 'Rekam Medis' },
-    { id: 'tips',      icon: BookOpen,         label: 'Tips' },
     { id: 'settings',  icon: Settings,         label: 'Pengaturan' },
   ];
 
   const unreadCount = notifications.filter(n => n.unread).length;
-  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', tips: 'Tips Perawatan', settings: 'Pengaturan' };
+  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
@@ -2332,11 +2516,10 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-6">
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => addNotif(session.user.id, payload)} />}
+              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => addNotif(session.user.id, payload)} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} />}
-              {activeTab === 'tips' && <TipsPage selectedPet={selectedPet} records={records} />}
               {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} />}
             </div>
           )}
