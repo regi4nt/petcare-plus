@@ -763,24 +763,27 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   return (
     <div className="space-y-6 anim-slide-up">
 
-      {/* ── Pet Selector ── */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-            Hewan Peliharaan
-            <span className="bg-indigo-100 text-indigo-600 text-[10px] font-black px-2 py-0.5 rounded-full">{pets.length}</span>
-          </h3>
+      {/* ── KELOLA HEWAN SECTION (Selector + Edit terintegrasi) ── */}
+      <section className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-50">
+          <div className="flex items-center gap-2">
+            <PawPrint size={16} className="text-indigo-500" />
+            <h3 className="font-black text-slate-800">Hewan Peliharaan</h3>
+            <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">{pets.length} hewan</span>
+          </div>
           <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
             <Plus size={12} /> Tambah
           </button>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+
+        {/* Selector strip */}
+        <div className="flex gap-2 overflow-x-auto px-6 pt-4 pb-3 scrollbar-hide border-b border-slate-50">
           {pets.map(pet => {
             const PetIcon = PET_ICONS[pet.species] || Cat;
             const col = PET_COLORS[pet.species] || PET_COLORS['Kucing'];
             const active = selectedPet.id === pet.id;
             return (
-              <button key={pet.id} onClick={() => setSelectedPet(pet)}
+              <button key={pet.id} onClick={() => { setSelectedPet(pet); setEditPetId(null); }}
                 className={`flex items-center gap-2.5 shrink-0 px-3.5 py-2.5 rounded-2xl border-2 transition-all duration-200 ${active ? 'border-indigo-500 bg-indigo-50 shadow-md' : 'border-slate-100 bg-white hover:border-slate-300 hover:shadow-sm'}`}>
                 <div className={`w-8 h-8 ${col.bg} rounded-xl flex items-center justify-center shrink-0`}>
                   <PetIcon size={16} className={col.text} />
@@ -792,6 +795,56 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
               </button>
             );
           })}
+        </div>
+
+        {/* Detail / Edit hewan yang sedang aktif */}
+        <div className="px-6 py-4">
+          {editPetId === selectedPet.id ? (
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="font-bold text-slate-800">Edit {selectedPet.name}</h4>
+                <button onClick={() => setEditPetId(null)} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400"><X size={16} /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[['Nama', 'name', 'text'], ['Ras', 'breed', 'text']].map(([l, k, t]) => (
+                  <div key={k}><label className="label-style">{l}</label><input type={t} value={petForm[k] || ''} onChange={e => setPetForm({ ...petForm, [k]: e.target.value })} className="input-style" /></div>
+                ))}
+                <div>
+                  <label className="label-style">Usia</label>
+                  <input type="text" inputMode="decimal" placeholder="2 = 2th, 3,5 = 3,5mgg"
+                    value={petForm.age || ''}
+                    onChange={e => { const raw = e.target.value; const hasDecimal = raw.replace(',','.').includes('.'); setPetForm({ ...petForm, age: raw, age_unit: hasDecimal ? 'minggu' : 'tahun' }); }}
+                    className="input-style" />
+                  {petForm.age != null && petForm.age !== '' && (
+                    <p className="text-[10px] mt-1 font-semibold text-indigo-500">→ {String(petForm.age).replace(',','.')} {petForm.age_unit || 'tahun'}</p>
+                  )}
+                </div>
+                <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={petForm.weight || ''} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} className="input-style" /></div>
+                <div><label className="label-style">Gender</label><select value={petForm.gender || 'Jantan'} onChange={e => setPetForm({ ...petForm, gender: e.target.value })} className="input-style"><option>Jantan</option><option>Betina</option></select></div>
+                <div><label className="label-style">Warna</label><input type="text" value={petForm.color || ''} onChange={e => setPetForm({ ...petForm, color: e.target.value })} className="input-style" /></div>
+              </div>
+              <div className="mt-3"><label className="label-style">Catatan</label><textarea value={petForm.notes || ''} onChange={e => setPetForm({ ...petForm, notes: e.target.value })} rows={2} className="input-style resize-none" /></div>
+              <div className="flex gap-3 mt-4">
+                <button onClick={savePetDash} disabled={petSaving} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 flex items-center justify-center gap-2 disabled:opacity-60">
+                  {petSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Simpan
+                </button>
+                <button onClick={() => setDeleteConfirm(selectedPet.id)} className="py-2.5 px-4 bg-rose-50 text-rose-500 rounded-2xl font-bold hover:bg-rose-100 transition-colors"><Trash2 size={15} /></button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <PetAvatar species={selectedPet.species} size="md" />
+              <div className="flex-1">
+                <p className="font-bold text-slate-800">{selectedPet.name}</p>
+                <p className="text-xs text-slate-500">{selectedPet.species} · {selectedPet.breed} · {formatAge(selectedPet.age, selectedPet.age_unit)} · {formatWeight(selectedPet.weight)} kg</p>
+                {selectedPet.notes && <p className="text-[11px] text-slate-400 mt-1 italic">"{selectedPet.notes}"</p>}
+              </div>
+              <button onClick={() => { setEditPetId(selectedPet.id); setPetForm({ ...selectedPet }); }}
+                className="p-2.5 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl border border-slate-100 transition-all">
+                <Edit3 size={15} />
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -945,23 +998,6 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             );
           })()}
 
-          {/* ── Profil Singkat Hewan ── */}
-          <div className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm">
-            <div className="flex items-center gap-3 mb-4">
-              <PetAvatar species={selectedPet.species} size="md" />
-              <div>
-                <h4 className="font-bold text-slate-800">{selectedPet.name}</h4>
-                <p className="text-xs text-slate-500">{selectedPet.species} · {selectedPet.breed}</p>
-              </div>
-            </div>
-            {[['Usia', formatAge(selectedPet.age, selectedPet.age_unit)], ['Berat', `${formatWeight(selectedPet.weight)} kg`], ['Gender', selectedPet.gender || '-'], ['Warna', selectedPet.color || '-']].map(([k, v]) => (
-              <div key={k} className="flex justify-between items-center py-2 border-b border-slate-50 last:border-0">
-                <span className="text-xs text-slate-500">{k}</span>
-                <span className="text-xs font-bold text-slate-800">{v}</span>
-              </div>
-            ))}
-            {selectedPet.notes && <p className="text-xs text-slate-400 mt-3 italic">"{selectedPet.notes}"</p>}
-          </div>
         </div>
       </div>
 
@@ -1045,78 +1081,6 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
               </div>
             );
           })()}
-        </div>
-      </section>
-
-      {/* ── KELOLA HEWAN SECTION ── */}
-      <section className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-50">
-          <div className="flex items-center gap-2">
-            <PawPrint size={16} className="text-indigo-500" />
-            <h3 className="font-black text-slate-800">Kelola Hewan</h3>
-            <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">{pets.length} hewan</span>
-          </div>
-          <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
-            <Plus size={12} /> Tambah
-          </button>
-        </div>
-
-        <div className="px-6 py-4 space-y-3">
-          {pets.length === 0 && (
-            <div className="text-center py-10 text-slate-400">
-              <Cat size={36} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Belum ada hewan terdaftar</p>
-            </div>
-          )}
-          {pets.map(pet => (
-            <div key={pet.id} className="bg-slate-50 rounded-[20px] border border-slate-100 p-4">
-              {editPetId === pet.id ? (
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-bold text-slate-800">Edit {pet.name}</h4>
-                    <button onClick={() => setEditPetId(null)} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-400"><X size={16} /></button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[['Nama', 'name', 'text'], ['Ras', 'breed', 'text']].map(([l, k, t]) => (
-                      <div key={k}><label className="label-style">{l}</label><input type={t} value={petForm[k] || ''} onChange={e => setPetForm({ ...petForm, [k]: e.target.value })} className="input-style" /></div>
-                    ))}
-                    <div>
-                      <label className="label-style">Usia</label>
-                      <input type="text" inputMode="decimal" placeholder="2 = 2th, 3,5 = 3,5mgg"
-                        value={petForm.age || ''}
-                        onChange={e => { const raw = e.target.value; const hasDecimal = raw.replace(',','.').includes('.'); setPetForm({ ...petForm, age: raw, age_unit: hasDecimal ? 'minggu' : 'tahun' }); }}
-                        className="input-style" />
-                      {petForm.age != null && petForm.age !== '' && (
-                        <p className="text-[10px] mt-1 font-semibold text-indigo-500">\u2192 {String(petForm.age).replace(',','.')} {petForm.age_unit || 'tahun'}</p>
-                      )}
-                    </div>
-                    <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={petForm.weight || ''} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} className="input-style" /></div>
-                    <div><label className="label-style">Gender</label><select value={petForm.gender || 'Jantan'} onChange={e => setPetForm({ ...petForm, gender: e.target.value })} className="input-style"><option>Jantan</option><option>Betina</option></select></div>
-                    <div><label className="label-style">Warna</label><input type="text" value={petForm.color || ''} onChange={e => setPetForm({ ...petForm, color: e.target.value })} className="input-style" /></div>
-                  </div>
-                  <div className="mt-3"><label className="label-style">Catatan</label><textarea value={petForm.notes || ''} onChange={e => setPetForm({ ...petForm, notes: e.target.value })} rows={2} className="input-style resize-none" /></div>
-                  <div className="flex gap-3 mt-4">
-                    <button onClick={savePetDash} disabled={petSaving} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 flex items-center justify-center gap-2 disabled:opacity-60">
-                      {petSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Simpan
-                    </button>
-                    <button onClick={() => setDeleteConfirm(pet.id)} className="py-2.5 px-4 bg-rose-50 text-rose-500 rounded-2xl font-bold hover:bg-rose-100 transition-colors"><Trash2 size={15} /></button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <PetAvatar species={pet.species} size="md" />
-                  <div className="flex-1">
-                    <p className="font-bold text-slate-800">{pet.name}</p>
-                    <p className="text-xs text-slate-500">{pet.species} · {pet.breed} · {formatAge(pet.age, pet.age_unit)} · {formatWeight(pet.weight)} kg</p>
-                  </div>
-                  <button onClick={() => { setEditPetId(pet.id); setPetForm({ ...pet }); }}
-                    className="p-2.5 bg-white hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl border border-slate-100 transition-all">
-                    <Edit3 size={15} />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
         </div>
       </section>
 
@@ -1468,29 +1432,20 @@ const TipsPage = ({ selectedPet, records }) => {
 };
 
 // ─── SETTINGS PAGE ────────────────────────────────────────────────────
-const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet }) => {
+const SettingsPage = ({ user, profile, onUpdateProfile, onLogout }) => {
   const [section, setSection] = useState('profile');
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: profile?.name || '', phone: profile?.phone || '' });
-  const [editPetId, setEditPetId] = useState(null);
-  const [petForm, setPetForm] = useState({});
   const [notifSettings, setNotifSettings] = useState({ jadwal: true, kesehatan: true, tips: true, vaksinasi: true });
   const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const saveProfile = async () => {
     setSaving(true);
     try { await onUpdateProfile(profileForm); setEditProfile(false); } finally { setSaving(false); }
   };
 
-  const savePet = async () => {
-    setSaving(true);
-    try { await onUpdatePet(editPetId, petForm); setEditPetId(null); } finally { setSaving(false); }
-  };
-
   const sections = [
     { id: 'profile', label: 'Edit Profil', icon: User },
-    { id: 'pets', label: 'Kelola Hewan', icon: Cat },
     { id: 'notifications', label: 'Notifikasi', icon: Bell },
     { id: 'app', label: 'Tentang', icon: Settings },
   ];
@@ -1545,83 +1500,6 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                       <span className="text-sm font-bold text-slate-800">{v}</span>
                     </div>
                   ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {section === 'pets' && (
-            <div className="space-y-4">
-              {pets.length === 0 && <div className="text-center py-12 text-slate-400 bg-white rounded-[28px] border border-slate-100"><Cat size={40} className="mx-auto mb-3 opacity-30" /><p>Belum ada hewan</p></div>}
-              {pets.map(pet => (
-                <div key={pet.id} className="bg-white rounded-[28px] border border-slate-100 p-5 shadow-sm">
-                  {editPetId === pet.id ? (
-                    <div>
-                      <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-bold text-slate-800">Edit {pet.name}</h4>
-                        <button onClick={() => setEditPetId(null)} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400"><X size={17} /></button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[['Nama', 'name', 'text'], ['Ras', 'breed', 'text']].map(([l, k, t]) => (
-                          <div key={k}><label className="label-style">{l}</label><input type={t} value={petForm[k] || ''} onChange={e => setPetForm({ ...petForm, [k]: e.target.value })} className="input-style" /></div>
-                        ))}
-                        <div>
-                          <label className="label-style">Usia</label>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="cth: 2 = 2 tahun, 3,5 = 3,5 minggu"
-                            value={petForm.age || ''}
-                            onChange={e => {
-                              const raw = e.target.value;
-                              const hasDecimal = raw.replace(',', '.').includes('.');
-                              setPetForm({ ...petForm, age: raw, age_unit: hasDecimal ? 'minggu' : 'tahun' });
-                            }}
-                            className="input-style"
-                          />
-                          {petForm.age != null && petForm.age !== '' && (
-                            <p className="text-[10px] mt-1 font-semibold text-indigo-500">
-                              → {String(petForm.age).replace(',','.')} {petForm.age_unit || 'tahun'}
-                            </p>
-                          )}
-                        </div>
-                        <div><label className="label-style">Berat (kg)</label><input type="number" min="0" step="0.01" value={petForm.weight || ''} onChange={e => setPetForm({ ...petForm, weight: e.target.value })} className="input-style" /></div>
-                        <div><label className="label-style">Gender</label><select value={petForm.gender || 'Jantan'} onChange={e => setPetForm({ ...petForm, gender: e.target.value })} className="input-style"><option>Jantan</option><option>Betina</option></select></div>
-                        <div><label className="label-style">Warna</label><input type="text" value={petForm.color || ''} onChange={e => setPetForm({ ...petForm, color: e.target.value })} className="input-style" /></div>
-                      </div>
-                      <div className="mt-3"><label className="label-style">Catatan</label><textarea value={petForm.notes || ''} onChange={e => setPetForm({ ...petForm, notes: e.target.value })} rows={2} className="input-style resize-none" /></div>
-                      <div className="flex gap-3 mt-4">
-                        <button onClick={savePet} disabled={saving} className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm hover:bg-indigo-700 flex items-center justify-center gap-2 disabled:opacity-60">
-                          {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Simpan
-                        </button>
-                        <button onClick={() => setDeleteConfirm(pet.id)} className="py-3 px-5 bg-rose-50 text-rose-500 rounded-2xl font-bold"><Trash2 size={16} /></button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-4">
-                      <PetAvatar species={pet.species} size="md" />
-                      <div className="flex-1">
-                        <p className="font-bold text-slate-800">{pet.name}</p>
-                        <p className="text-xs text-slate-500">{pet.species} · {pet.breed} · {formatAge(pet.age, pet.age_unit)} · {formatWeight(pet.weight)} kg</p>
-                      </div>
-                      <button onClick={() => { setEditPetId(pet.id); setPetForm({ ...pet }); }} className="p-2.5 bg-slate-50 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-xl transition-all">
-                        <Edit3 size={16} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {deleteConfirm && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-                  <div className="bg-white rounded-[28px] p-6 max-w-sm w-full shadow-2xl anim-zoom text-center">
-                    <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={22} className="text-rose-500" /></div>
-                    <h4 className="font-black text-slate-800 text-lg mb-2">Hapus Hewan?</h4>
-                    <p className="text-sm text-slate-500 mb-6">Data akan dihapus permanen dari database.</p>
-                    <div className="flex gap-3">
-                      <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-sm">Batal</button>
-                      <button onClick={async () => { await onDeletePet(deleteConfirm); setDeleteConfirm(null); setEditPetId(null); }} className="flex-1 py-3 bg-rose-500 text-white rounded-2xl font-bold text-sm hover:bg-rose-600">Hapus</button>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
@@ -2520,7 +2398,7 @@ export default function App() {
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} />}
-              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} />}
+              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} />}
             </div>
           )}
         </div>
