@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   HeartPulse, LayoutDashboard, Calendar, Activity, Settings, Bell,
   Plus, Thermometer, Clock, X, CheckCircle2, LogOut, User, Edit3,
@@ -1331,7 +1332,7 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
       </div>
 
       {/* ── Modal Tambah Jadwal ── */}
-      {showForm && (
+      {showForm && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
@@ -1398,7 +1399,7 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete }) => {
             </form>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 };
@@ -1601,7 +1602,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
       )}
 
       {/* ── Modal Form Tambah ── */}
-      {showForm && (
+      {showForm && createPortal(
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
           <div className="bg-white w-full max-w-md rounded-[32px] p-7 shadow-2xl anim-zoom max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
@@ -1664,7 +1665,7 @@ const MedicalPage = ({ pets, records, onAdd, onDelete }) => {
             </form>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 };
