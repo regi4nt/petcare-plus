@@ -2282,12 +2282,12 @@ const AddPetModal = ({ onClose, onAdd, loading }) => {
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white w-full max-w-md rounded-[32px] shadow-2xl max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
+        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 px-7 pt-7 pb-6 rounded-t-[32px] relative overflow-hidden">
           <div className="absolute -right-6 -top-6 w-28 h-28 bg-white/10 rounded-full" />
           <div className="absolute right-8 bottom-0 w-14 h-14 bg-white/10 rounded-full" />
           <div className="flex justify-between items-start relative">
             <div>
-              <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-1">Daftarkan Hewan</p>
+              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mb-1">Daftarkan Hewan</p>
               <h3 className="text-2xl font-black text-white">Tambah Anabul</h3>
             </div>
             <button onClick={onClose} className="p-2 bg-white/20 hover:bg-white/30 rounded-full text-white transition-all"><X size={18} /></button>
@@ -2639,6 +2639,88 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
             </div>
           )}
 
+          {/* Device Info */}
+          <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-800 flex items-center gap-2">
+                <Wifi size={16} className="text-slate-400" /> Status Koneksi Perangkat
+              </h3>
+              {lastUpdate && (
+                <span className="text-xs text-slate-400 font-semibold">
+                  Update: {lastUpdate.toLocaleTimeString("id-ID")}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                ["Device ID", latest?.device_id ?? "—"],
+                ["Mode Aktif", mode ? (isKandang ? "Kandang" : "Kalung") : "—"],
+                ["Sumber Mode", modeSource === 'iot' ? "Dari ESP32" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
+                ["Interval Kirim", mode ? (isKandang ? "5 detik" : "15 detik") : "—"],
+                ["Data Tersimpan", history.length + " rekaman"],
+                ["Firmware", "esp32_iot_monitoring"],
+                ["Database", "Supabase Realtime"],
+                ["Status Koneksi", latest ? "🟢 Terhubung" : "🔴 Menunggu"],
+              ].map(([k, v]) => (
+                <div key={k} className="bg-slate-50 rounded-2xl p-3">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{k}</p>
+                  <p className="font-bold text-slate-700 mt-0.5 text-xs">{v}</p>
+                </div>
+              ))}
+            </div>
+            <div className={`mt-4 flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold ${latest ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+              {latest
+                ? <><Wifi size={14} /> Terhubung — Supabase Realtime aktif, data langsung dari ESP32</>
+                : <><WifiOff size={14} /> Menunggu data dari ESP32. Pastikan PET_ID di firmware sudah diisi.</>
+              }
+            </div>
+          </div>
+          {/* Tabel Referensi Nilai Normal */}
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-4">
+              <Info size={16} className="text-indigo-500" /> Referensi Nilai Normal Vital Sign Hewan
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50 rounded-xl">
+                    <th className="text-left p-3 font-black text-slate-500 rounded-l-xl">Spesies</th>
+                    <th className="text-center p-3 font-black text-amber-600">Suhu (°C)</th>
+                    <th className="text-center p-3 font-black text-rose-600">Detak Jantung (BPM)</th>
+                    <th className="text-center p-3 font-black text-sky-600 rounded-r-xl">SpO₂ (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ['Kucing',        '38.1 – 39.2', '120 – 140', '≥ 95'],
+                    ['Anjing',        '37.5 – 39.2', '60 – 120',  '≥ 95'],
+                    ['Kelinci',       '38.5 – 40.0', '120 – 150', '≥ 95'],
+                    ['Hamster',       '37.0 – 38.5', '250 – 500', '≥ 95'],
+                    ['Marmut',        '37.2 – 39.5', '150 – 250', '≥ 95'],
+                    ['Ferret',        '37.8 – 40.0', '180 – 250', '≥ 95'],
+                    ['Sugar Glider',  '36.0 – 37.5', '200 – 300', '≥ 95'],
+                    ['Landak Mini',   '36.0 – 38.0', '100 – 300', '≥ 95'],
+                  ].map(([sp, suhu, hr, spo2], idx) => {
+                    const isSelected = selectedPet?.species === sp;
+                    return (
+                      <tr key={sp} className={`transition-colors ${isSelected ? 'bg-indigo-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
+                        <td className="p-3 font-bold text-slate-700 flex items-center gap-1.5">
+                          {isSelected && <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full inline-block" />}
+                          {sp}
+                          {isSelected && <span className="text-[9px] bg-indigo-100 text-indigo-700 font-black px-1.5 py-0.5 rounded-full">Aktif</span>}
+                        </td>
+                        <td className="p-3 text-center font-semibold text-slate-600">{suhu}</td>
+                        <td className="p-3 text-center font-semibold text-slate-600">{hr}</td>
+                        <td className="p-3 text-center font-semibold text-slate-600">{spo2}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-3">* Nilai referensi bersifat indikatif. Konsultasikan dengan dokter hewan untuk diagnosis akurat.</p>
+          </div>
+
           {/* Detail Sensor yang Dipakai */}
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
             <h3 className="font-black text-slate-800 flex items-center gap-2 mb-5">
@@ -2739,88 +2821,6 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
             </div>
           </div>
 
-          {/* Tabel Referensi Nilai Normal */}
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-4">
-              <Info size={16} className="text-indigo-500" /> Referensi Nilai Normal Vital Sign Hewan
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-slate-50 rounded-xl">
-                    <th className="text-left p-3 font-black text-slate-500 rounded-l-xl">Spesies</th>
-                    <th className="text-center p-3 font-black text-amber-600">Suhu (°C)</th>
-                    <th className="text-center p-3 font-black text-rose-600">Detak Jantung (BPM)</th>
-                    <th className="text-center p-3 font-black text-sky-600 rounded-r-xl">SpO₂ (%)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ['Kucing',        '38.1 – 39.2', '120 – 140', '≥ 95'],
-                    ['Anjing',        '37.5 – 39.2', '60 – 120',  '≥ 95'],
-                    ['Kelinci',       '38.5 – 40.0', '120 – 150', '≥ 95'],
-                    ['Hamster',       '37.0 – 38.5', '250 – 500', '≥ 95'],
-                    ['Marmut',        '37.2 – 39.5', '150 – 250', '≥ 95'],
-                    ['Ferret',        '37.8 – 40.0', '180 – 250', '≥ 95'],
-                    ['Sugar Glider',  '36.0 – 37.5', '200 – 300', '≥ 95'],
-                    ['Landak Mini',   '36.0 – 38.0', '100 – 300', '≥ 95'],
-                  ].map(([sp, suhu, hr, spo2], idx) => {
-                    const isSelected = selectedPet?.species === sp;
-                    return (
-                      <tr key={sp} className={`transition-colors ${isSelected ? 'bg-indigo-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}>
-                        <td className="p-3 font-bold text-slate-700 flex items-center gap-1.5">
-                          {isSelected && <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full inline-block" />}
-                          {sp}
-                          {isSelected && <span className="text-[9px] bg-indigo-100 text-indigo-700 font-black px-1.5 py-0.5 rounded-full">Aktif</span>}
-                        </td>
-                        <td className="p-3 text-center font-semibold text-slate-600">{suhu}</td>
-                        <td className="p-3 text-center font-semibold text-slate-600">{hr}</td>
-                        <td className="p-3 text-center font-semibold text-slate-600">{spo2}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-3">* Nilai referensi bersifat indikatif. Konsultasikan dengan dokter hewan untuk diagnosis akurat.</p>
-          </div>
-
-          {/* Device Info */}
-          <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
-                <Wifi size={16} className="text-slate-400" /> Status Koneksi Perangkat
-              </h3>
-              {lastUpdate && (
-                <span className="text-xs text-slate-400 font-semibold">
-                  Update: {lastUpdate.toLocaleTimeString("id-ID")}
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                ["Device ID", latest?.device_id ?? "—"],
-                ["Mode Aktif", mode ? (isKandang ? "Kandang" : "Kalung") : "—"],
-                ["Sumber Mode", modeSource === 'iot' ? "Dari ESP32" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
-                ["Interval Kirim", mode ? (isKandang ? "5 detik" : "15 detik") : "—"],
-                ["Data Tersimpan", history.length + " rekaman"],
-                ["Firmware", "esp32_iot_monitoring"],
-                ["Database", "Supabase Realtime"],
-                ["Status Koneksi", latest ? "🟢 Terhubung" : "🔴 Menunggu"],
-              ].map(([k, v]) => (
-                <div key={k} className="bg-slate-50 rounded-2xl p-3">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{k}</p>
-                  <p className="font-bold text-slate-700 mt-0.5 text-xs">{v}</p>
-                </div>
-              ))}
-            </div>
-            <div className={`mt-4 flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold ${latest ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-              {latest
-                ? <><Wifi size={14} /> Terhubung — Supabase Realtime aktif, data langsung dari ESP32</>
-                : <><WifiOff size={14} /> Menunggu data dari ESP32. Pastikan PET_ID di firmware sudah diisi.</>
-              }
-            </div>
-          </div>
         </>
       )}
     </div>
@@ -3066,12 +3066,12 @@ export default function App() {
   const MOBILE_NAV = NAV.filter(n => n.id !== 'settings');
 
   const unreadCount = notifications.filter(n => n.unread).length;
-  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal', medical: 'Rekam Medis', settings: 'Pengaturan' };
+  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
 
 
   return (
-    <div data-dark={darkMode ? "true" : undefined} className={"flex bg-slate-50 text-slate-900 overflow-hidden"} style={{height: '100dvh', minHeight: '-webkit-fill-available'}}>
+    <div data-dark={darkMode ? "true" : undefined} className={"flex h-screen bg-slate-50 text-slate-900 overflow-hidden"}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* PWA Install Modal */}
@@ -3089,7 +3089,6 @@ export default function App() {
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 p-5 shrink-0">
         <div className="flex items-center gap-3 mb-8">
           <img src="/logo.svg" alt="PetCare+" className="w-10 h-10 rounded-xl shadow-md shadow-indigo-200" />
-          <span className="text-xl font-black text-slate-800">PetCare<span className="text-indigo-500">+</span></span>
         </div>
         <nav className="flex-1 space-y-1">
           {NAV.map(item => (
@@ -3125,10 +3124,9 @@ export default function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-white border-b border-slate-100 px-4 flex items-center justify-between z-40 shrink-0">
           <div className="flex items-center gap-2.5">
-            {/* Logo + name — mobile only */}
+            {/* Logo — mobile only (md:hidden replaces it with sidebar) */}
             <img src="/logo.svg" alt="PetCare+" className="md:hidden w-8 h-8 rounded-lg" />
-            <span className="md:hidden text-base font-black text-slate-800">PetCare<span className="text-indigo-500">+</span></span>
-            <h2 className="hidden md:block text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
+            <h2 className="text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
             {/* Banner izin push notifikasi — ditampilkan di header agar tidak ganggu konten */}
             {'Notification' in window && Notification.permission === 'default' && (
               <button
@@ -3180,7 +3178,8 @@ export default function App() {
           )}
         </div>
 
-        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-2 pb-2 shrink-0 z-30" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))', overflow: 'visible'}}>          {/* Split nav: 2 item kiri - spacer FAB - 2 item kanan */}
+        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-2 pb-2 shrink-0" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))'}}>
+          {/* Split nav: 2 item kiri - spacer FAB - 2 item kanan */}
           {MOBILE_NAV.slice(0, 2).map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
               className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
