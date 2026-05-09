@@ -2595,7 +2595,7 @@ const AddPetModal = ({ onClose, onAdd, loading }) => {
 
 
 // ─── MONITOR PAGE (IoT) ───────────────────────────────────────────────
-const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
+const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) => {
   const [latest, setLatest] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -3453,7 +3453,7 @@ export default function App() {
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
               {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
-              {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} />}
+              {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
               {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} />}
