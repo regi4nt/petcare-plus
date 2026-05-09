@@ -1551,8 +1551,8 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete, darkMode }) 
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-xl font-black text-slate-800">Jadwal</h3>
-          <p className="text-sm text-slate-500 mt-0.5">{(schedules || []).filter(s => isToday(s.date)).length} jadwal hari ini</p>
+          <h3 className="text-xl font-black text-slate-800">Jadwal Kegiatan</h3>
+          <p className="text-sm text-slate-500 mt-0.5">{(schedules || []).filter(s => isToday(s.date)).length} jadwal kegiatan hari ini</p>
         </div>
         <button onClick={() => { resetForm(); setShowForm(true); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-sm">
@@ -2548,23 +2548,26 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-col items-end gap-2 shrink-0">
           {isLive && (
             <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-100 px-3 py-1.5 rounded-full">
               <Radio size={11} /> LIVE
             </span>
           )}
-          <button
-            onClick={() => setShowHibernationModal(true)}
-            disabled={!selectedPet?.id}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-bold text-xs transition-all shadow-sm"
-          >
-            <Zap size={13} /> 🔋 Hibernasi
-          </button>
-          <button onClick={() => fetchData(selectedPet?.id)} disabled={loading}
-            className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-slate-500 hover:text-indigo-600 border border-slate-200 shadow-sm transition-all">
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowHibernationModal(true)}
+              disabled={!selectedPet?.id}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-2 rounded-xl font-bold text-xs transition-all shadow-sm"
+            >
+              <Zap size={13} />
+              <span className="hidden sm:inline">Hibernasi</span>
+            </button>
+            <button onClick={() => fetchData(selectedPet?.id)} disabled={loading}
+              className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-slate-500 hover:text-indigo-600 border border-slate-200 shadow-sm transition-all shrink-0">
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3079,17 +3082,17 @@ export default function App() {
   if (!session) return <AuthPage />;
 
   const NAV = [
-    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { id: 'monitor',   icon: Cpu,             label: 'Monitor IoT' },
-    { id: 'schedule',  icon: Calendar,         label: 'Jadwal' },
-    { id: 'medical',   icon: FileText,         label: 'Rekam Medis' },
-    { id: 'settings',  icon: Settings,         label: 'Pengaturan' },
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard',       mobileLabel: 'Dashboard' },
+    { id: 'monitor',   icon: Cpu,             label: 'Monitor IoT',     mobileLabel: 'Monitor' },
+    { id: 'schedule',  icon: Calendar,         label: 'Jadwal Kegiatan', mobileLabel: 'Kegiatan' },
+    { id: 'medical',   icon: FileText,         label: 'Rekam Medis',     mobileLabel: 'Rekam Medis' },
+    { id: 'settings',  icon: Settings,         label: 'Pengaturan',      mobileLabel: 'Pengaturan' },
   ];
   // Nav khusus mobile — tanpa Pengaturan (akses via avatar/header)
   const MOBILE_NAV = NAV.filter(n => n.id !== 'settings');
 
   const unreadCount = notifications.filter(n => n.unread).length;
-  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal', medical: 'Rekam Medis', settings: 'Pengaturan' };
+  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
 
 
@@ -3205,7 +3208,7 @@ export default function App() {
           )}
         </div>
 
-        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-1 pb-2 shrink-0" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))'}}>
+        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-1 pt-1 pb-2 shrink-0" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))'}}>
           {/* Split nav: 2 item kiri - spacer FAB - 2 item kanan */}
           {MOBILE_NAV.slice(0, 2).map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
