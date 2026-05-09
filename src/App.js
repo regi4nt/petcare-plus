@@ -8,9 +8,11 @@ import {
   FileText, Pill, Stethoscope, Syringe, Droplets,
   UtensilsCrossed, Dumbbell, LucideStar, Info, BookOpen, Loader2,
   Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint, Moon, Sun,
-  Download, Smartphone, Monitor, Share2, ArrowDown, MoreHorizontal, Chrome
+  Download, Smartphone, Monitor, Share2, ArrowDown, MoreHorizontal, Chrome,
+  Zap
 } from 'lucide-react';
-import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService } from './lib/api';
+import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService, deviceCommandService } from './lib/api';
+import { HibernationControlModal } from './components/HibernationControl';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────
 const PET_ICONS = {
@@ -2347,6 +2349,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isLive, setIsLive] = useState(false);
+  const [showHibernationModal, setShowHibernationModal] = useState(false);
 
   const fetchData = useCallback(async (petId) => {
     if (!petId) return;
@@ -2551,6 +2554,13 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
               <Radio size={11} /> LIVE
             </span>
           )}
+          <button
+            onClick={() => setShowHibernationModal(true)}
+            disabled={!selectedPet?.id}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-bold text-xs transition-all shadow-sm"
+          >
+            <Zap size={13} /> 🔋 Hibernasi
+          </button>
           <button onClick={() => fetchData(selectedPet?.id)} disabled={loading}
             className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-slate-500 hover:text-indigo-600 border border-slate-200 shadow-sm transition-all">
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
@@ -2823,6 +2833,19 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
 
         </>
       )}
+
+      {/* ── Hibernation Control Modal ──────────────────────────────── */}
+      <HibernationControlModal
+        isOpen={showHibernationModal}
+        onClose={() => setShowHibernationModal(false)}
+        petId={selectedPet?.id}
+        deviceId={selectedPet?.device_id || 'esp32-01'}
+        petName={selectedPet?.name}
+        onSuccess={() => {
+          // Opsional: bisa tambahkan toast atau refresh data di sini
+        }}
+      />
+
     </div>
   );
 };

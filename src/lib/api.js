@@ -448,3 +448,93 @@ export const monitoringService = {
     if (error) throw error;
   },
 };
+
+// ─── DEVICE COMMANDS (Hibernasi ESP32) ────────────────────────────────
+
+export const deviceCommandService = {
+  /**
+   * Kirim perintah ke ESP32 via tabel device_commands.
+   * @param {string} petId     - UUID pet
+   * @param {string} deviceId  - ID perangkat ESP32 (misal: 'esp32-01')
+   * @param {string} command   - 'hibernate' | 'resume' | 'restart'
+   * @param {object} payload   - config tambahan, misal { duration_minutes: 30 }
+   * @returns {object} row yang baru dibuat
+   */
+  async send(petId, deviceId, command, payload = {}) {
+    const { data, error } = await supabase
+      .from('device_commands')
+      .insert({
+        pet_id:    petId,
+        device_id: deviceId,
+        command,
+        payload,
+        status:    'pending',
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Ambil riwayat perintah untuk pet tertentu.
+   * @param {string} petId  - UUID pet
+   * @param {number} limit  - jumlah data (default: 20)
+   * @returns {Array} daftar perintah, diurutkan dari terbaru
+   */
+  async getHistory(petId, limit = 20) {
+    const { data, error } = await supabase
+      .from('device_commands')
+      .select('*')
+      .eq('pet_id', petId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Ambil perintah aktif (status: pending) untuk perangkat tertentu.
+   * Digunakan untuk cek apakah sedang ada hibernasi aktif.
+   * @param {string} deviceId
+   * @returns {object|null} perintah pending terakhir
+   */
+  async getPendingCommand(deviceId) {
+    const { data, error } = await supabase
+      .from('device_commands')
+      .select('*')
+      .eq('device_id', deviceId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Subscribe realtime ke perubahan status perintah untuk pet tertentu.
+   * Berguna untuk update UI saat ESP32 mengeksekusi perintah.
+   * @param {string}   petId     - UUID pet
+   * @param {function} onUpdate  - callback(updatedRow)
+   * @returns channel (panggil channel.unsubscribe() untuk cleanup)
+   */
+  subscribeStatus(petId, onUpdate) {
+    const channel = supabase
+      .channel(`device_commands:${petId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  '*',   // INSERT & UPDATE
+          schema: 'public',
+          table:  'device_commands',
+          filter: `pet_id=eq.${petId}`,
+        },
+        (payload) => {
+          onUpdate(payload.new);
+        }
+      )
+      .subscribe();
+    return channel;
+  },
+};
