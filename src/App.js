@@ -3097,7 +3097,7 @@ export default function App() {
 
 
   return (
-    <div data-dark={darkMode ? "true" : undefined} className={"flex h-screen bg-slate-50 text-slate-900 overflow-hidden"}>
+    <div data-dark={darkMode ? "true" : undefined} className={"flex bg-slate-50 text-slate-900 overflow-hidden"} style={{height: '100dvh'}}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* PWA Install Modal */}
