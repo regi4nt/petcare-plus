@@ -1551,8 +1551,8 @@ const SchedulePage = ({ pets, schedules, onAdd, onToggle, onDelete, darkMode }) 
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-xl font-black text-slate-800">Kalender Kegiatan</h3>
-          <p className="text-sm text-slate-500 mt-0.5">{(schedules || []).filter(s => isToday(s.date)).length} kegiatan hari ini</p>
+          <h3 className="text-xl font-black text-slate-800">Jadwal</h3>
+          <p className="text-sm text-slate-500 mt-0.5">{(schedules || []).filter(s => isToday(s.date)).length} jadwal hari ini</p>
         </div>
         <button onClick={() => { resetForm(); setShowForm(true); }}
           className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-sm">
@@ -3089,7 +3089,7 @@ export default function App() {
   const MOBILE_NAV = NAV.filter(n => n.id !== 'settings');
 
   const unreadCount = notifications.filter(n => n.unread).length;
-  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT (ESP32)', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
+  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal', medical: 'Rekam Medis', settings: 'Pengaturan' };
 
 
 
@@ -3112,6 +3112,7 @@ export default function App() {
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-100 p-5 shrink-0">
         <div className="flex items-center gap-3 mb-8">
           <img src="/logo.svg" alt="PetCare+" className="w-10 h-10 rounded-xl shadow-md shadow-indigo-200" />
+          <span className="text-lg font-black text-slate-800">PetCare<span className="text-indigo-500">+</span></span>
         </div>
         <nav className="flex-1 space-y-1">
           {NAV.map(item => (
@@ -3147,9 +3148,12 @@ export default function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 bg-white border-b border-slate-100 px-4 flex items-center justify-between z-40 shrink-0">
           <div className="flex items-center gap-2.5">
-            {/* Logo — mobile only (md:hidden replaces it with sidebar) */}
-            <img src="/logo.svg" alt="PetCare+" className="md:hidden w-8 h-8 rounded-lg" />
-            <h2 className="text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
+            {/* Mobile: logo + app name; Desktop: page title only */}
+            <div className="flex md:hidden items-center gap-2">
+              <img src="/logo.svg" alt="PetCare+" className="w-8 h-8 rounded-xl shadow-sm shadow-indigo-200" />
+              <span className="text-base font-black text-slate-800">PetCare<span className="text-indigo-500">+</span></span>
+            </div>
+            <h2 className="hidden md:block text-lg font-black text-slate-800">{pageTitles[activeTab]}</h2>
             {/* Banner izin push notifikasi — ditampilkan di header agar tidak ganggu konten */}
             {'Notification' in window && Notification.permission === 'default' && (
               <button
@@ -3201,11 +3205,11 @@ export default function App() {
           )}
         </div>
 
-        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-2 pb-2 shrink-0" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))'}}>
+        <nav className="md:hidden relative flex bg-white border-t border-slate-100 px-2 pt-1 pb-2 shrink-0" style={{paddingBottom: 'max(8px, env(safe-area-inset-bottom, 8px))'}}>
           {/* Split nav: 2 item kiri - spacer FAB - 2 item kanan */}
           {MOBILE_NAV.slice(0, 2).map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
-              className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+              className={`flex-1 flex items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
               <item.icon size={21} />
             </button>
           ))}
@@ -3213,7 +3217,7 @@ export default function App() {
           <div className="w-16 shrink-0" />
           {MOBILE_NAV.slice(2).map(item => (
             <button key={item.id} onClick={() => handleTabChange(item.id)}
-              className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+              className={`flex-1 flex items-center justify-center py-2 rounded-xl transition-all ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
               <item.icon size={21} />
             </button>
           ))}

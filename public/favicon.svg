@@ -4,8 +4,13 @@
       <stop offset="0%" stop-color="#4f46e5"/>
       <stop offset="100%" stop-color="#7c3aed"/>
     </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#g)"/>
+  <rect width="64" height="64" rx="14" fill="url(#shine)"/>
   <!-- Main pad -->
   <ellipse cx="32" cy="40" rx="11" ry="9.5" fill="white" opacity="0.95"/>
   <!-- Toes -->
@@ -13,7 +18,11 @@
   <ellipse cx="26.5" cy="22" rx="4.5" ry="5.5" fill="white" opacity="0.95"/>
   <ellipse cx="37.5" cy="22" rx="4.5" ry="5.5" fill="white" opacity="0.95"/>
   <ellipse cx="45" cy="27" rx="5" ry="6" fill="white" opacity="0.95"/>
-  <!-- Plus -->
-  <rect x="46" y="11" width="7" height="2" rx="1" fill="white" opacity="0.9"/>
-  <rect x="48.5" y="8.5" width="2" height="7" rx="1" fill="white" opacity="0.9"/>
+  <!-- Heart overlay on main pad (matches logo.svg) -->
+  <path d="M32 45.5 C32 45.5 24 40.5 24 36 C24 33 26.5 31.5 29 32.2 C30.2 32.5 31.2 33.4 32 34.4 C32.8 33.4 33.8 32.5 35 32.2 C37.5 31.5 40 33 40 36 C40 40.5 32 45.5 32 45.5Z" fill="#4f46e5" opacity="0.85"/>
+  <!-- Plus sign top-right -->
+  <g opacity="0.9">
+    <rect x="46" y="11" width="7" height="2" rx="1" fill="white"/>
+    <rect x="48.5" y="8.5" width="2" height="7" rx="1" fill="white"/>
+  </g>
 </svg>
