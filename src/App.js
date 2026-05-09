@@ -2050,6 +2050,8 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
   const [saving, setSaving] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
   const [openTutorial, setOpenTutorial] = useState(null);
+  const [revealWa, setRevealWa] = useState(false);
+  const [revealEmail, setRevealEmail] = useState(false);
   const [pushPermission, setPushPermission] = useState(() =>
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
@@ -2153,17 +2155,19 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             <div className="space-y-4">
               {/* Browser Push Permission Card */}
               <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center">
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
                     <Bell size={18} className="text-indigo-500" />
                   </div>
-                  <div>
-                    <h4 className="font-bold text-slate-800 text-sm">Notifikasi Push (Browser)</h4>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                      <h4 className="font-bold text-slate-800 text-sm">Notifikasi Push (Browser)</h4>
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full ${psi.cls}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${psi.dot}`} />
+                        {psi.label}
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-500">Izin untuk kirim notifikasi ke perangkat</p>
-                  </div>
-                  <div className="ml-auto flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${psi.dot}`} />
-                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${psi.cls}`}>{psi.label}</span>
                   </div>
                 </div>
                 {pushPermission === 'default' && (
@@ -2179,7 +2183,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                 )}
                 {pushPermission === 'granted' && (
                   <div className="p-4 bg-emerald-50 rounded-2xl text-sm text-emerald-700 font-medium flex items-center gap-2">
-                    <CheckCircle2 size={16} /> Notifikasi push aktif — pengingat jadwal akan dikirim otomatis.
+                    <CheckCircle2 size={16} className="shrink-0" /> Notifikasi push aktif — pengingat jadwal akan dikirim otomatis.
                   </div>
                 )}
               </div>
@@ -2190,17 +2194,15 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                 <p className="text-xs text-slate-500 mb-5">Pilih jenis notifikasi yang ingin diterima. Perubahan langsung tersimpan.</p>
                 <div className="space-y-3">
                   {NOTIF_ITEMS.map(({ key, title, desc, icon: NIcon }) => (
-                    <div key={key} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${notifSettings[key] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
-                          <NIcon size={16} />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-800 text-sm">{title}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
-                        </div>
+                    <div key={key} className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${notifSettings[key] ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                        <NIcon size={16} />
                       </div>
-                      <button onClick={() => toggleNotif(key)} className="transition-colors ml-3 shrink-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-800 text-sm">{title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{desc}</p>
+                      </div>
+                      <button onClick={() => toggleNotif(key)} className="transition-colors shrink-0">
                         {notifSettings[key]
                           ? <ToggleRight size={34} className="text-indigo-600" />
                           : <ToggleLeft size={34} className="text-slate-300" />
@@ -2221,88 +2223,82 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             <div className="space-y-4">
 
               {/* Kontak Customer Service */}
-              {(() => {
-                const [revealWa, setRevealWa] = React.useState(false);
-                const [revealEmail, setRevealEmail] = React.useState(false);
-                return (
-                  <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
-                        <Phone size={18} className="text-indigo-500" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-800 text-sm">Hubungi Kami</h4>
-                        <p className="text-xs text-slate-500">Tim kami siap membantu Anda</p>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      {/* WhatsApp */}
-                      {revealWa ? (
-                        <a href="https://wa.me/6285257363635" target="_blank" rel="noopener noreferrer"
-                          className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
-                              <Phone size={16} className="text-white" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-emerald-800 text-sm">WhatsApp / Telepon</p>
-                              <p className="text-sm text-emerald-700 font-mono">0852-5736-3635</p>
-                            </div>
-                          </div>
-                          <ChevronRight size={16} className="text-emerald-500 group-hover:translate-x-1 transition-transform" />
-                        </a>
-                      ) : (
-                        <button onClick={() => setRevealWa(true)}
-                          className="w-full flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group text-left">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
-                              <Phone size={16} className="text-white" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-emerald-800 text-sm">WhatsApp / Telepon</p>
-                              <p className="text-sm text-emerald-600 tracking-widest">••••••••••••</p>
-                            </div>
-                          </div>
-                          <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg">Tampilkan</span>
-                        </button>
-                      )}
-                      {/* Email */}
-                      {revealEmail ? (
-                        <a href="mailto:regiant2012@gmail.com"
-                          className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
-                              <Mail size={16} className="text-white" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-indigo-800 text-sm">Email</p>
-                              <p className="text-sm text-indigo-700">regiant2012@gmail.com</p>
-                            </div>
-                          </div>
-                          <ChevronRight size={16} className="text-indigo-500 group-hover:translate-x-1 transition-transform" />
-                        </a>
-                      ) : (
-                        <button onClick={() => setRevealEmail(true)}
-                          className="w-full flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group text-left">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
-                              <Mail size={16} className="text-white" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-indigo-800 text-sm">Email</p>
-                              <p className="text-sm text-indigo-600 tracking-widest">••••••••••••••••</p>
-                            </div>
-                          </div>
-                          <span className="text-xs font-semibold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-lg">Tampilkan</span>
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-4 p-3 bg-slate-50 rounded-2xl">
-                      <p className="text-xs text-slate-500 text-center font-medium">⏰ Jam layanan: Senin – Sabtu, 08.00 – 17.00 WIB</p>
-                    </div>
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
+                    <Phone size={18} className="text-indigo-500" />
                   </div>
-                );
-              })()}
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Hubungi Kami</h4>
+                    <p className="text-xs text-slate-500">Tim kami siap membantu Anda</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {/* WhatsApp */}
+                  {revealWa ? (
+                    <a href="https://wa.me/6285257363635" target="_blank" rel="noopener noreferrer"
+                      className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
+                          <Phone size={16} className="text-white" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-emerald-800 text-sm">WhatsApp / Telepon</p>
+                          <p className="text-sm text-emerald-700 font-mono">0852-5736-3635</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-emerald-500 group-hover:translate-x-1 transition-transform" />
+                    </a>
+                  ) : (
+                    <button onClick={() => setRevealWa(true)}
+                      className="w-full flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group text-left">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
+                          <Phone size={16} className="text-white" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-emerald-800 text-sm">WhatsApp / Telepon</p>
+                          <p className="text-sm text-emerald-600 tracking-widest">••••••••••••</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg">Tampilkan</span>
+                    </button>
+                  )}
+                  {/* Email */}
+                  {revealEmail ? (
+                    <a href="mailto:regiant2012@gmail.com"
+                      className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
+                          <Mail size={16} className="text-white" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-indigo-800 text-sm">Email</p>
+                          <p className="text-sm text-indigo-700">regiant2012@gmail.com</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-indigo-500 group-hover:translate-x-1 transition-transform" />
+                    </a>
+                  ) : (
+                    <button onClick={() => setRevealEmail(true)}
+                      className="w-full flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group text-left">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
+                          <Mail size={16} className="text-white" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-indigo-800 text-sm">Email</p>
+                          <p className="text-sm text-indigo-600 tracking-widest">••••••••••••••••</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-semibold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-lg">Tampilkan</span>
+                    </button>
+                  )}
+                </div>
+                <div className="mt-4 p-3 bg-slate-50 rounded-2xl">
+                  <p className="text-xs text-slate-500 text-center font-medium">⏰ Jam layanan: Senin – Sabtu, 08.00 – 17.00 WIB</p>
+                </div>
+              </div>
 
               {/* FAQ */}
               <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
