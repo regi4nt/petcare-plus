@@ -2237,61 +2237,61 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                   {/* WhatsApp */}
                   {revealWa ? (
                     <a href="https://wa.me/6285257363635" target="_blank" rel="noopener noreferrer"
-                      className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group">
-                      <div className="flex items-center gap-3">
+                      className="flex items-center justify-between gap-2 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
                           <Phone size={16} className="text-white" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-bold text-emerald-800 text-sm">WhatsApp / Telepon</p>
                           <p className="text-sm text-emerald-700 font-mono">0852-5736-3635</p>
                         </div>
                       </div>
-                      <ChevronRight size={16} className="text-emerald-500 group-hover:translate-x-1 transition-transform" />
+                      <ChevronRight size={16} className="text-emerald-500 shrink-0 group-hover:translate-x-1 transition-transform" />
                     </a>
                   ) : (
                     <button onClick={() => setRevealWa(true)}
-                      className="w-full flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group text-left">
-                      <div className="flex items-center gap-3">
+                      className="w-full flex items-center justify-between gap-2 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group text-left">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
                           <Phone size={16} className="text-white" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-bold text-emerald-800 text-sm">WhatsApp / Telepon</p>
                           <p className="text-sm text-emerald-600 tracking-widest">••••••••••••</p>
                         </div>
                       </div>
-                      <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg">Tampilkan</span>
+                      <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg shrink-0">Tampilkan</span>
                     </button>
                   )}
                   {/* Email */}
                   {revealEmail ? (
                     <a href="mailto:regiant2012@gmail.com"
-                      className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group">
-                      <div className="flex items-center gap-3">
+                      className="flex items-center justify-between gap-2 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
                           <Mail size={16} className="text-white" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-bold text-indigo-800 text-sm">Email</p>
-                          <p className="text-sm text-indigo-700">regiant2012@gmail.com</p>
+                          <p className="text-sm text-indigo-700 break-all">regiant2012@gmail.com</p>
                         </div>
                       </div>
-                      <ChevronRight size={16} className="text-indigo-500 group-hover:translate-x-1 transition-transform" />
+                      <ChevronRight size={16} className="text-indigo-500 shrink-0 group-hover:translate-x-1 transition-transform" />
                     </a>
                   ) : (
                     <button onClick={() => setRevealEmail(true)}
-                      className="w-full flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group text-left">
-                      <div className="flex items-center gap-3">
+                      className="w-full flex items-center justify-between gap-2 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group text-left">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
                           <Mail size={16} className="text-white" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-bold text-indigo-800 text-sm">Email</p>
                           <p className="text-sm text-indigo-600 tracking-widest">••••••••••••••••</p>
                         </div>
                       </div>
-                      <span className="text-xs font-semibold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-lg">Tampilkan</span>
+                      <span className="text-xs font-semibold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-lg shrink-0">Tampilkan</span>
                     </button>
                   )}
                 </div>
@@ -2497,7 +2497,7 @@ const NotifPanel = ({ notifications, onMarkAllRead, onClearAll, onMarkOneRead })
   const typeIcon = { success: CheckCircle2, warning: AlertCircle, info: Info };
   const typeColor = { success: 'text-emerald-500', warning: 'text-amber-500', info: 'text-indigo-500' };
   return (
-    <div className="absolute right-0 top-14 w-96 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50">
+    <div className="absolute right-0 top-14 w-[calc(100vw-2rem)] sm:w-96 max-w-[24rem] bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50">
       <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
         <span className="font-black text-slate-800">Notifikasi
           <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full ml-2">{notifications.filter(n => n.unread).length}</span>
@@ -3096,6 +3096,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet }) => {
         petId={selectedPet?.id}
         deviceId={selectedPet?.device_id || 'esp32-01'}
         petName={selectedPet?.name}
+        darkMode={darkMode}
         onSuccess={() => {
           // Opsional: bisa tambahkan toast atau refresh data di sini
         }}
