@@ -1,6 +1,6 @@
 {
   "short_name": "PetCare+",
-  "name": "PetCare+ — Pantau Kesehatan Hewan Peliharaan",
+  "name": "PetCare+",
   "description": "Aplikasi pemantauan kesehatan hewan peliharaan dengan IoT terintegrasi",
   "icons": [
     {
@@ -18,8 +18,8 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#4f46e5",
-  "background_color": "#1e1b4b",
+  "theme_color": "#818cf8",
+  "background_color": "#0f0c2e",
   "orientation": "portrait-primary",
   "lang": "id"
 }

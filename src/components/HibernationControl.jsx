@@ -150,10 +150,10 @@ export const HibernationControlModal = ({
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+      <div className="w-full max-w-lg bg-white rounded-[32px] shadow-2xl flex flex-col overflow-hidden" style={{maxHeight: '90dvh'}}>
 
         {/* ── Header ──────────────────────────────────────────── */}
-        <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-6 pt-6 pb-5 text-white relative">
+        <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-6 pt-6 pb-5 text-white relative shrink-0">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-all"
@@ -184,7 +184,7 @@ export const HibernationControlModal = ({
         </div>
 
         {/* ── Tabs ────────────────────────────────────────────── */}
-        <div className="flex border-b border-slate-100 px-6 pt-1">
+        <div className="flex border-b border-slate-100 px-6 pt-1 shrink-0">
           {[
             { id: 'kontrol', label: '⚡ Kontrol' },
             { id: 'riwayat', label: '📋 Riwayat' },
@@ -203,6 +203,9 @@ export const HibernationControlModal = ({
           ))}
         </div>
 
+        {/* ── Scrollable content area ──────────────────────────── */}
+        <div className="flex-1 overflow-y-auto">
+
         {/* ── Feedback Banner ─────────────────────────────────── */}
         {feedback && (
           <div className={`mx-5 mt-4 px-4 py-3 rounded-2xl text-sm font-semibold flex items-center gap-2 ${
@@ -220,7 +223,7 @@ export const HibernationControlModal = ({
 
         {/* ── TAB: KONTROL ─────────────────────────────────────── */}
         {activeTab === 'kontrol' && (
-          <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+          <div className="px-6 py-5 space-y-5">
 
             {/* Durasi */}
             <div>
@@ -330,7 +333,7 @@ export const HibernationControlModal = ({
 
         {/* ── TAB: RIWAYAT ─────────────────────────────────────── */}
         {activeTab === 'riwayat' && (
-          <div className="px-6 py-5 max-h-[60vh] overflow-y-auto">
+          <div className="px-6 py-5">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-black text-slate-500 uppercase tracking-wider">
                 Riwayat Perintah
@@ -420,8 +423,10 @@ export const HibernationControlModal = ({
           </div>
         )}
 
+        </div>{/* end scrollable content */}
+
         {/* ── Footer ──────────────────────────────────────────── */}
-        <div className="px-6 py-4 border-t border-slate-100">
+        <div className="px-6 py-4 border-t border-slate-100 shrink-0">
           <button
             onClick={onClose}
             className="w-full py-3 rounded-2xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-all"

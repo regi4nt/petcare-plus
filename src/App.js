@@ -2048,6 +2048,8 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: profile?.name || '', phone: profile?.phone || '' });
   const [saving, setSaving] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
+  const [openTutorial, setOpenTutorial] = useState(null);
   const [pushPermission, setPushPermission] = useState(() =>
     typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
   );
@@ -2075,9 +2077,10 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
   ];
 
   const sections = [
-    { id: 'profile',       label: 'Edit Profil',  icon: User },
-    { id: 'notifications', label: 'Notifikasi',   icon: Bell },
-    { id: 'app',           label: 'Tentang',      icon: Info },
+    { id: 'profile',       label: 'Edit Profil',        icon: User },
+    { id: 'notifications', label: 'Notifikasi',          icon: Bell },
+    { id: 'bantuan',       label: 'Bantuan & Dukungan',  icon: Phone },
+    { id: 'app',           label: 'Tentang',             icon: Info },
   ];
 
   const pushStatusInfo = {
@@ -2212,6 +2215,221 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
           )}
 
 
+
+          {/* ── BANTUAN & DUKUNGAN ── */}
+          {section === 'bantuan' && (
+            <div className="space-y-4">
+
+              {/* Kontak Customer Service */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center shrink-0">
+                    <Phone size={18} className="text-indigo-500" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Hubungi Kami</h4>
+                    <p className="text-xs text-slate-500">Tim kami siap membantu Anda</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {/* WhatsApp */}
+                  <a href="https://wa.me/6285257363635" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100 hover:bg-emerald-100 transition-all group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
+                        <Phone size={16} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-emerald-800 text-sm">WhatsApp / Telepon</p>
+                        <p className="text-sm text-emerald-700 font-mono">0852-5736-3635</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-emerald-500 group-hover:translate-x-1 transition-transform" />
+                  </a>
+                  {/* Email */}
+                  <a href="mailto:regiant2012@gmail.com"
+                    className="flex items-center justify-between p-4 bg-indigo-50 rounded-2xl border border-indigo-100 hover:bg-indigo-100 transition-all group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center shrink-0">
+                        <Mail size={16} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-indigo-800 text-sm">Email</p>
+                        <p className="text-sm text-indigo-700">regiant2012@gmail.com</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-indigo-500 group-hover:translate-x-1 transition-transform" />
+                  </a>
+                </div>
+                <div className="mt-4 p-3 bg-slate-50 rounded-2xl">
+                  <p className="text-xs text-slate-500 text-center font-medium">⏰ Jam layanan: Senin – Sabtu, 08.00 – 17.00 WIB</p>
+                </div>
+              </div>
+
+              {/* FAQ */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-amber-50 rounded-2xl flex items-center justify-center shrink-0">
+                    <AlertCircle size={18} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Kendala Umum & Solusi</h4>
+                    <p className="text-xs text-slate-500">Tap untuk melihat solusi</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    {
+                      q: 'Tidak bisa login / lupa password',
+                      a: 'Klik "Lupa Password" di halaman login, lalu masukkan email yang terdaftar. Cek inbox email Anda untuk tautan reset password. Jika tidak muncul, cek folder Spam/Junk.'
+                    },
+                    {
+                      q: 'Data hewan tidak tersimpan',
+                      a: 'Pastikan koneksi internet stabil saat menyimpan. Jika masalah berlanjut, coba refresh halaman (tekan F5 atau tarik layar ke bawah di mobile), lalu ulangi. Pastikan semua kolom wajib (bintang *) sudah diisi.'
+                    },
+                    {
+                      q: 'Notifikasi jadwal tidak muncul',
+                      a: 'Buka Pengaturan → Notifikasi → pastikan izin Push sudah "Aktif". Di mobile, pastikan notifikasi browser tidak diblokir di pengaturan HP. Untuk PWA, instal aplikasi terlebih dahulu agar notifikasi lebih andal.'
+                    },
+                    {
+                      q: 'Monitor IoT tidak menampilkan data sensor',
+                      a: 'Pastikan perangkat ESP32 menyala dan terhubung ke WiFi. Cek apakah device_id di pengaturan hewan sudah sesuai dengan ID perangkat IoT. Tekan tombol Refresh (ikon panah melingkar) di halaman Monitor untuk menarik data terbaru.'
+                    },
+                    {
+                      q: 'Tombol "Hibernasi" tidak berfungsi',
+                      a: 'Pastikan hewan sudah dipilih dan perangkat IoT terhubung. Fitur hibernasi mengirim perintah ke ESP32 melalui database — ESP32 harus dalam kondisi aktif dan terhubung internet agar perintah dapat diterima.'
+                    },
+                    {
+                      q: 'Halaman lambat atau tidak termuat',
+                      a: 'Coba bersihkan cache browser: tekan Ctrl+Shift+R (Windows) atau Cmd+Shift+R (Mac). Di mobile, buka pengaturan browser dan hapus cache situs. Pastikan koneksi internet stabil.'
+                    },
+                    {
+                      q: 'Tidak bisa instal aplikasi (PWA)',
+                      a: 'Di Android: buka di Chrome, tap ikon ⋮ pojok kanan atas → "Tambahkan ke layar utama". Di iPhone: buka di Safari, tap ikon Share → "Tambahkan ke Layar Utama". Browser selain Safari di iOS tidak mendukung PWA.'
+                    },
+                  ].map((item, i) => (
+                    <div key={i} className="border border-slate-100 rounded-2xl overflow-hidden">
+                      <button
+                        onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                        className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="text-sm font-semibold text-slate-700 pr-3">{item.q}</span>
+                        <ChevronDown size={16} className={`text-slate-400 shrink-0 transition-transform duration-200 ${openFaq === i ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openFaq === i && (
+                        <div className="px-4 pb-4 bg-amber-50 border-t border-amber-100">
+                          <p className="text-sm text-slate-600 leading-relaxed pt-3">{item.a}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tutorial */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-violet-50 rounded-2xl flex items-center justify-center shrink-0">
+                    <BookOpen size={18} className="text-violet-500" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-800 text-sm">Tutorial Penggunaan</h4>
+                    <p className="text-xs text-slate-500">Panduan lengkap fitur PetCare+</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    {
+                      title: '🐾 Menambahkan Hewan Peliharaan',
+                      steps: [
+                        'Buka halaman Dashboard',
+                        'Klik tombol "+ Tambah Hewan" di pojok kanan atas',
+                        'Isi formulir: nama, spesies, ras, usia, berat, dan gender',
+                        'Klik "Daftarkan Sekarang" — hewan langsung tersimpan',
+                        'Hewan baru otomatis muncul di daftar dan bisa dipilih',
+                      ]
+                    },
+                    {
+                      title: '📅 Membuat Jadwal Kegiatan',
+                      steps: [
+                        'Buka menu "Jadwal Kegiatan" di navigasi',
+                        'Klik tombol "+ Tambah" di pojok kanan atas',
+                        'Pilih hewan, jenis kegiatan (Makan/Vaksinasi/Olahraga/dll)',
+                        'Isi nama kegiatan, tanggal, dan jam',
+                        'Atur pengulangan jika kegiatan rutin (harian/mingguan/bulanan)',
+                        'Jadwal muncul di daftar dan akan mengirim notifikasi otomatis',
+                      ]
+                    },
+                    {
+                      title: '🏥 Mencatat Rekam Medis',
+                      steps: [
+                        'Buka menu "Rekam Medis" di navigasi',
+                        'Klik "+ Tambah Catatan"',
+                        'Pilih hewan dan jenis catatan (Pemeriksaan/Vaksinasi/Operasi/dll)',
+                        'Isi judul, tanggal, dan deskripsi pemeriksaan',
+                        'Tambahkan berat badan saat itu dan tanggal kunjungan berikutnya',
+                        'Rekam medis tersimpan dan Smart Tips di Dashboard akan menyesuaikan',
+                      ]
+                    },
+                    {
+                      title: '📡 Memantau IoT (Monitor)',
+                      steps: [
+                        'Pastikan perangkat ESP32 sudah terpasang dan menyala',
+                        'Buka menu "Monitor" di navigasi',
+                        'Pilih hewan yang terhubung ke perangkat IoT',
+                        'Data suhu, detak jantung, dan saturasi O₂ tampil real-time',
+                        'Tekan Refresh untuk memuat data terbaru',
+                        'Gunakan tombol "Hibernasi" untuk menghemat daya sensor saat tidak diperlukan',
+                      ]
+                    },
+                    {
+                      title: '🔔 Mengatur Notifikasi',
+                      steps: [
+                        'Buka Pengaturan → Notifikasi',
+                        'Klik "Izinkan Notifikasi Push" jika belum diizinkan',
+                        'Aktifkan/matikan jenis notifikasi sesuai kebutuhan',
+                        'Pengingat jadwal akan dikirim 15 menit sebelum dan tepat saat jadwal tiba',
+                        'Untuk pengalaman terbaik, instal PetCare+ sebagai aplikasi (PWA)',
+                      ]
+                    },
+                    {
+                      title: '📱 Instal sebagai Aplikasi (PWA)',
+                      steps: [
+                        'Di Android (Chrome): tap ikon ⋮ → "Tambahkan ke layar utama"',
+                        'Di iPhone (Safari): tap ikon Share → "Tambahkan ke Layar Utama"',
+                        'Di Desktop (Chrome/Edge): klik ikon ⊕ di address bar',
+                        'Setelah terinstal, buka PetCare+ langsung dari ikon di layar utama',
+                        'Aplikasi berjalan tanpa URL bar dan mendukung notifikasi lebih andal',
+                      ]
+                    },
+                  ].map((tut, i) => (
+                    <div key={i} className="border border-slate-100 rounded-2xl overflow-hidden">
+                      <button
+                        onClick={() => setOpenTutorial(openTutorial === i ? null : i)}
+                        className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-slate-50 transition-colors"
+                      >
+                        <span className="text-sm font-semibold text-slate-700">{tut.title}</span>
+                        <ChevronDown size={16} className={`text-slate-400 shrink-0 transition-transform duration-200 ${openTutorial === i ? 'rotate-180' : ''}`} />
+                      </button>
+                      {openTutorial === i && (
+                        <div className="px-4 pb-4 bg-violet-50 border-t border-violet-100">
+                          <ol className="mt-3 space-y-2">
+                            {tut.steps.map((step, si) => (
+                              <li key={si} className="flex items-start gap-3">
+                                <span className="w-5 h-5 bg-violet-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shrink-0 mt-0.5">{si + 1}</span>
+                                <span className="text-sm text-slate-600 leading-relaxed">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          )}
 
           {/* ── TENTANG ── */}
           {section === 'app' && (
