@@ -149,8 +149,8 @@ export const HibernationControlModal = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-white rounded-[32px] shadow-2xl flex flex-col overflow-hidden" style={{maxHeight: '90dvh'}}>
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-white rounded-[32px] shadow-2xl flex flex-col overflow-hidden" style={{maxHeight: '90vh'}}>
 
         {/* ── Header ──────────────────────────────────────────── */}
         <div className="bg-gradient-to-br from-indigo-600 to-violet-600 px-6 pt-6 pb-5 text-white relative shrink-0">
