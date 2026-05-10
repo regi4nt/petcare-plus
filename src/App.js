@@ -9,7 +9,7 @@ import {
   UtensilsCrossed, Dumbbell, LucideStar, Info, BookOpen, Loader2,
   Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint, Moon, Sun,
   Download, Smartphone, Monitor, Share2, ArrowDown, MoreHorizontal, Chrome,
-  Zap
+  Zap, LogIn
 } from 'lucide-react';
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService, deviceCommandService } from './lib/api';
 import { HibernationControlModal } from './components/HibernationControl';
@@ -639,6 +639,93 @@ const PWAInstallButton = ({ platform, deferredPrompt, triggerInstall, isInstalle
         />
       )}
     </>
+  );
+};
+
+// ─── RECOVERY CHOICE PAGE ─────────────────────────────────────────────
+const RecoveryChoicePage = ({ onResetPassword, onGoToDashboard }) => {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #06081a 0%, #0d1035 40%, #0f0a2e 100%)' }}>
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div style={{ position:'absolute', top:'-10%', right:'-5%', width:'45vw', height:'45vw', maxWidth:480, maxHeight:480, background:'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)', borderRadius:'50%', filter:'blur(40px)' }} />
+        <div style={{ position:'absolute', bottom:'-10%', left:'-5%', width:'40vw', height:'40vw', maxWidth:420, maxHeight:420, background:'radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%)', borderRadius:'50%', filter:'blur(40px)' }} />
+        <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(rgba(165,180,252,0.06) 1px, transparent 1px)', backgroundSize:'32px 32px' }} />
+      </div>
+      <div className="w-full max-w-[400px] relative z-10">
+        <div className="text-center mb-8">
+          <div className="relative inline-flex items-center justify-center mb-5">
+            <div style={{ position:'absolute', inset:'-8px', background:'radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 70%)', borderRadius:28, filter:'blur(12px)' }} />
+            <img src="/logo.svg" alt="PetCare+" className="relative rounded-[22px]"
+              style={{ width:72, height:72, boxShadow:'0 0 0 1px rgba(165,180,252,0.15), 0 20px 40px rgba(0,0,0,0.5)' }} />
+          </div>
+          <h1 className="text-[32px] font-black text-white tracking-tight leading-none mb-2">
+            PetCare<span style={{ color:'#818cf8' }}>+</span>
+          </h1>
+          <p className="text-sm font-medium" style={{ color:'rgba(165,180,252,0.6)' }}>
+            Verifikasi email berhasil
+          </p>
+        </div>
+
+        <div style={{ background:'rgba(255,255,255,0.05)', backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', border:'1px solid rgba(255,255,255,0.09)', borderRadius:28, overflow:'hidden', boxShadow:'0 32px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04) inset' }}>
+
+          {/* Header */}
+          <div className="p-6 text-center" style={{ borderBottom:'1px solid rgba(255,255,255,0.07)' }}>
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3"
+              style={{ background:'rgba(16,185,129,0.15)', border:'1px solid rgba(16,185,129,0.25)' }}>
+              <CheckCircle2 size={24} style={{ color:'#34d399' }} />
+            </div>
+            <p className="text-sm font-semibold text-white mb-1">Link berhasil diverifikasi</p>
+            <p className="text-xs" style={{ color:'rgba(165,180,252,0.5)' }}>
+              Pilih tindakan yang ingin Anda lakukan
+            </p>
+          </div>
+
+          {/* Pilihan */}
+          <div className="p-6 space-y-3">
+
+            {/* Opsi 1: Ganti Password */}
+            <button onClick={onResetPassword}
+              className="w-full flex items-center gap-4 text-left transition-all"
+              style={{ background:'rgba(99,102,241,0.1)', border:'1px solid rgba(99,102,241,0.25)', borderRadius:16, padding:'16px 18px', cursor:'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.background='rgba(99,102,241,0.18)'; e.currentTarget.style.borderColor='rgba(99,102,241,0.45)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background='rgba(99,102,241,0.1)'; e.currentTarget.style.borderColor='rgba(99,102,241,0.25)'; }}>
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl"
+                style={{ background:'rgba(99,102,241,0.2)' }}>
+                <Lock size={18} style={{ color:'#818cf8' }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white mb-0.5">Ganti Password</p>
+                <p className="text-xs" style={{ color:'rgba(165,180,252,0.5)' }}>
+                  Buat password baru untuk akun Anda
+                </p>
+              </div>
+              <ChevronRight size={16} style={{ color:'rgba(165,180,252,0.4)', flexShrink:0 }} />
+            </button>
+
+            {/* Opsi 2: Langsung Masuk */}
+            <button onClick={onGoToDashboard}
+              className="w-full flex items-center gap-4 text-left transition-all"
+              style={{ background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:16, padding:'16px 18px', cursor:'pointer' }}
+              onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.15)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; }}>
+              <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl"
+                style={{ background:'rgba(255,255,255,0.08)' }}>
+                <LogIn size={18} style={{ color:'rgba(165,180,252,0.7)' }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-white mb-0.5">Langsung Masuk</p>
+                <p className="text-xs" style={{ color:'rgba(165,180,252,0.5)' }}>
+                  Masuk ke dashboard tanpa ganti password
+                </p>
+              </div>
+              <ChevronRight size={16} style={{ color:'rgba(165,180,252,0.4)', flexShrink:0 }} />
+            </button>
+
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -3408,6 +3495,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
 export default function App() {
   const [session, setSession] = useState(null);
   const [isRecovery, setIsRecovery] = useState(false);
+  const [showChoice, setShowChoice] = useState(false);
   const [profile, setProfile] = useState(null);
   const [pets, setPets] = useState([]);
   const [selectedPet, setSelectedPet] = useState(null);
@@ -3473,23 +3561,23 @@ export default function App() {
     const urlType = hashParams.get('type');
 
     if (urlType === 'recovery') {
-      // Biarkan onAuthChange handle session dari URL hash,
-      // tandai langsung sebagai recovery agar tidak flash ke dashboard
       setIsRecovery(true);
+      setShowChoice(true);
     }
 
     // Subscribe dulu sebelum getSession supaya PASSWORD_RECOVERY event tidak terlewat
     const { data: { subscription } } = authService.onAuthChange((event, s) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecovery(true);
+        setShowChoice(true);
         setSession(s);
         setLoading(false);
       } else if (event === 'SIGNED_IN' && isRecovery) {
-        // Jangan clear isRecovery saat signed_in terjadi bersamaan dengan recovery
         setSession(s);
         setLoading(false);
       } else {
         setIsRecovery(false);
+        setShowChoice(false);
         setSession(s);
         setLoading(false);
       }
@@ -3661,9 +3749,20 @@ export default function App() {
   if (loading) return null;
 
   // Render auth page if not logged in
+  if (showChoice && session) return (
+    <RecoveryChoicePage
+      onResetPassword={() => setShowChoice(false)}
+      onGoToDashboard={() => {
+        window.history.replaceState(null, '', window.location.pathname);
+        setIsRecovery(false);
+        setShowChoice(false);
+      }}
+    />
+  );
   if (isRecovery && session) return <ResetPasswordPage onDone={() => {
     window.history.replaceState(null, '', window.location.pathname);
     setIsRecovery(false);
+    setShowChoice(false);
   }} />;
   if (!session) return <AuthPage />;
 
