@@ -41,6 +41,13 @@ export const authService = {
   onAuthChange(callback) {
     return supabase.auth.onAuthStateChange(callback);
   },
+
+  async resetPassword(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) throw error;
+  },
 };
 
 // ─── PROFILES ─────────────────────────────────────────────────────────

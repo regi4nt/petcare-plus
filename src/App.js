@@ -658,18 +658,24 @@ const AuthPage = () => {
     try {
       if (mode === 'login') {
         await authService.signIn(form.email, form.password);
-      } else {
+      } else if (mode === 'register') {
         if (!form.name.trim()) { setError('Nama wajib diisi'); setLoading(false); return; }
         await authService.signUp(form.email, form.password, form.name, form.phone);
         setSuccess('Akun berhasil dibuat! Silakan login.');
         setMode('login');
         setForm(f => ({ ...f, password: '' }));
+      } else if (mode === 'forgot') {
+        if (!form.email.trim()) { setError('Email wajib diisi'); setLoading(false); return; }
+        await authService.resetPassword(form.email);
+        setSuccess('Link reset password telah dikirim ke email Anda. Cek inbox atau folder Spam.');
       }
     } catch (err) {
       const msg = err.message || 'Terjadi kesalahan';
       if (msg.includes('Invalid login')) setError('Email atau password salah');
       else if (msg.includes('already registered')) setError('Email sudah terdaftar');
       else if (msg.includes('Password should')) setError('Password minimal 6 karakter');
+      else if (msg.includes('Email not confirmed')) setError('Email belum dikonfirmasi, cek inbox Anda');
+      else if (msg.includes('User not found')) setError('Email tidak terdaftar');
       else setError(msg);
     } finally { setLoading(false); }
   };
@@ -755,16 +761,64 @@ const AuthPage = () => {
               </div>
             )}
 
+            {/* ── FORGOT PASSWORD FORM ── */}
+            {mode === 'forgot' ? (
+              <div>
+                <div className="mb-5 text-center">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-3"
+                    style={{ background:'rgba(99,102,241,0.15)', border:'1px solid rgba(99,102,241,0.25)' }}>
+                    <Mail size={22} style={{ color:'#818cf8' }} />
+                  </div>
+                  <h2 className="text-base font-bold text-white mb-1">Reset Password</h2>
+                  <p className="text-xs" style={{ color:'rgba(165,180,252,0.55)' }}>
+                    Masukkan email Anda dan kami akan mengirimkan link untuk mereset password.
+                  </p>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="auth-label">Email</label>
+                    <div className="auth-field">
+                      <span className="auth-field-icon"><Mail size={16} /></span>
+                      <input type="email" required placeholder="email@example.com" value={form.email}
+                        onChange={e => setForm({ ...form, email: e.target.value })} className="auth-input" />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={loading}
+                    className="w-full flex items-center justify-center gap-2 font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      marginTop:8, padding:'15px 24px', borderRadius:16,
+                      background: loading ? 'rgba(99,102,241,0.5)' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                      color:'#fff',
+                      boxShadow: loading ? 'none' : '0 8px 24px rgba(99,102,241,0.35), 0 2px 8px rgba(0,0,0,0.3)',
+                      letterSpacing:'0.01em'
+                    }}>
+                    {loading
+                      ? <><Loader2 size={16} className="animate-spin" />Mengirim...</>
+                      : <><Mail size={15} /> Kirim Link Reset</>
+                    }
+                  </button>
+                </form>
+                <p className="text-center mt-5 text-xs" style={{ color:'rgba(165,180,252,0.35)' }}>
+                  Ingat password?{' '}
+                  <button onClick={() => switchMode('login')}
+                    className="font-bold transition-colors"
+                    style={{ color:'rgba(165,180,252,0.65)' }}>
+                    Masuk
+                  </button>
+                </p>
+              </div>
+            ) : (
+            /* ── LOGIN / REGISTER FORM ── */
             <form onSubmit={handleSubmit} className="space-y-4">
 
               {mode === 'register' && (
                 <>
                   <div>
                     <label className="auth-label">Nama Lengkap</label>
-                    <div className="relative">
-                      <User size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                    <div className="auth-field">
+                      <span className="auth-field-icon"><User size={16} /></span>
                       <input type="text" required placeholder="Budi Santoso" value={form.name}
-                        onChange={e => setForm({ ...form, name: e.target.value })} className="auth-input pl-10" />
+                        onChange={e => setForm({ ...form, name: e.target.value })} className="auth-input" />
                     </div>
                   </div>
                   <div>
@@ -772,10 +826,10 @@ const AuthPage = () => {
                       No. Telepon
                       <span className="ml-1.5 normal-case font-medium" style={{ color:'rgba(165,180,252,0.4)', letterSpacing:0 }}>opsional</span>
                     </label>
-                    <div className="relative">
-                      <Phone size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                    <div className="auth-field">
+                      <span className="auth-field-icon"><Phone size={16} /></span>
                       <input type="tel" placeholder="08xxxxxxxxxx" value={form.phone}
-                        onChange={e => setForm({ ...form, phone: e.target.value })} className="auth-input pl-10" />
+                        onChange={e => setForm({ ...form, phone: e.target.value })} className="auth-input" />
                     </div>
                   </div>
                 </>
@@ -783,10 +837,10 @@ const AuthPage = () => {
 
               <div>
                 <label className="auth-label">Email</label>
-                <div className="relative">
-                  <Mail size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                <div className="auth-field">
+                  <span className="auth-field-icon"><Mail size={16} /></span>
                   <input type="email" required placeholder="email@example.com" value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })} className="auth-input pl-10" />
+                    onChange={e => setForm({ ...form, email: e.target.value })} className="auth-input" />
                 </div>
               </div>
 
@@ -794,21 +848,25 @@ const AuthPage = () => {
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="auth-label" style={{ marginBottom:0 }}>Password</label>
                   {mode === 'login' && (
-                    <span className="text-[10px] font-semibold cursor-pointer"
-                      style={{ color:'rgba(165,180,252,0.45)' }}>
+                    <button type="button"
+                      onClick={() => switchMode('forgot')}
+                      className="text-[10px] font-semibold cursor-pointer transition-colors"
+                      style={{ color:'rgba(165,180,252,0.55)', background:'none', border:'none', padding:0 }}
+                      onMouseEnter={e => e.currentTarget.style.color='rgba(165,180,252,0.9)'}
+                      onMouseLeave={e => e.currentTarget.style.color='rgba(165,180,252,0.55)'}>
                       Lupa password?
-                    </span>
+                    </button>
                   )}
                 </div>
-                <div className="relative">
-                  <Lock size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                <div className="auth-field">
+                  <span className="auth-field-icon"><Lock size={16} /></span>
                   <input type={showPass ? 'text' : 'password'} required placeholder="min. 6 karakter"
                     value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                    className="auth-input pl-10 pr-12" />
+                    className="auth-input" />
                   <button type="button" onClick={() => setShowPass(!showPass)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors"
-                    style={{ color:'rgba(165,180,252,0.5)' }}>
-                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                    className="auth-input-right transition-colors"
+                    style={{ color:'rgba(165,180,252,0.5)', background:'none', border:'none', cursor:'pointer' }}>
+                    {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
@@ -830,7 +888,9 @@ const AuthPage = () => {
                 }
               </button>
             </form>
+            )}
 
+            {mode !== 'forgot' && (
             <p className="text-center mt-5 text-xs" style={{ color:'rgba(165,180,252,0.35)' }}>
               {mode === 'login' ? 'Belum punya akun? ' : 'Sudah punya akun? '}
               <button onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
@@ -839,6 +899,7 @@ const AuthPage = () => {
                 {mode === 'login' ? 'Daftar sekarang' : 'Masuk'}
               </button>
             </p>
+            )}
           </div>
         </div>
 
