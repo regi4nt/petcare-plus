@@ -674,66 +674,178 @@ const AuthPage = () => {
     } finally { setLoading(false); }
   };
 
+  const switchMode = (m) => { setMode(m); setError(''); setSuccess(''); };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #06081a 0%, #0d1035 40%, #0f0a2e 100%)' }}>
+
+      {/* Ambient background blobs */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div style={{ position:'absolute', top:'-10%', right:'-5%', width:'45vw', height:'45vw', maxWidth:480, maxHeight:480, background:'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)', borderRadius:'50%', filter:'blur(40px)' }} />
+        <div style={{ position:'absolute', bottom:'-10%', left:'-5%', width:'40vw', height:'40vw', maxWidth:420, maxHeight:420, background:'radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%)', borderRadius:'50%', filter:'blur(40px)' }} />
+        <div style={{ position:'absolute', top:'30%', left:'30%', width:'30vw', height:'30vw', maxWidth:320, maxHeight:320, background:'radial-gradient(circle, rgba(59,130,246,0.07) 0%, transparent 70%)', borderRadius:'50%', filter:'blur(60px)' }} />
+        <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(rgba(165,180,252,0.06) 1px, transparent 1px)', backgroundSize:'32px 32px' }} />
+      </div>
+
+      <div className="w-full max-w-[400px] relative z-10">
+
+        {/* Header */}
         <div className="text-center mb-8">
-          <img src="/logo.svg" alt="PetCare+" className="w-20 h-20 mx-auto mb-4 rounded-3xl shadow-2xl shadow-indigo-500/40" />
-          <h1 className="text-4xl font-black text-white tracking-tight">PetCare<span className="text-indigo-400">+</span></h1>
-          <p className="text-indigo-300 mt-2 font-medium">Platform kesehatan hewan peliharaan</p>
+          <div className="relative inline-flex items-center justify-center mb-5">
+            <div style={{ position:'absolute', inset:'-8px', background:'radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 70%)', borderRadius:28, filter:'blur(12px)' }} />
+            <img src="/logo.svg" alt="PetCare+"
+              className="relative rounded-[22px]"
+              style={{ width:72, height:72, boxShadow:'0 0 0 1px rgba(165,180,252,0.15), 0 20px 40px rgba(0,0,0,0.5)' }} />
+          </div>
+          <h1 className="text-[32px] font-black text-white tracking-tight leading-none mb-2">
+            PetCare<span style={{ color:'#818cf8' }}>+</span>
+          </h1>
+          <p className="text-sm font-medium" style={{ color:'rgba(165,180,252,0.6)' }}>
+            Platform kesehatan hewan peliharaan
+          </p>
         </div>
 
-        <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 border border-white/20 shadow-2xl">
-          <div className="flex bg-white/10 rounded-2xl p-1 mb-6">
-            {['login', 'register'].map(m => (
-              <button key={m} onClick={() => { setMode(m); setError(''); setSuccess(''); }}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${mode === m ? 'bg-white text-indigo-700 shadow' : 'text-indigo-300 hover:text-white'}`}>
-                {m === 'login' ? 'Masuk' : 'Daftar'}
+        {/* Card */}
+        <div style={{
+          background:'rgba(255,255,255,0.05)',
+          backdropFilter:'blur(24px)',
+          WebkitBackdropFilter:'blur(24px)',
+          border:'1px solid rgba(255,255,255,0.09)',
+          borderRadius:28,
+          overflow:'hidden',
+          boxShadow:'0 32px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04) inset'
+        }}>
+
+          {/* Tab switcher */}
+          <div className="flex" style={{ borderBottom:'1px solid rgba(255,255,255,0.07)' }}>
+            {[['login','Masuk'], ['register','Daftar']].map(([m, label]) => (
+              <button key={m} onClick={() => switchMode(m)}
+                className="flex-1 py-4 text-sm font-bold transition-all relative"
+                style={{ color: mode === m ? '#fff' : 'rgba(165,180,252,0.45)' }}>
+                {label}
+                <span style={{
+                  position:'absolute', bottom:0, left:'50%',
+                  transform:`translateX(-50%) scaleX(${mode === m ? 1 : 0})`,
+                  width:40, height:2,
+                  background:'linear-gradient(90deg, #818cf8, #6366f1)',
+                  borderRadius:99,
+                  transition:'transform 0.25s cubic-bezier(0.34,1.56,0.64,1)',
+                  display:'block'
+                }} />
               </button>
             ))}
           </div>
 
-          {error && <div className="mb-4 p-3 bg-rose-500/20 border border-rose-400/30 rounded-2xl flex items-center gap-2 text-rose-300 text-sm"><AlertCircle size={15} />{error}</div>}
-          {success && <div className="mb-4 p-3 bg-emerald-500/20 border border-emerald-400/30 rounded-2xl flex items-center gap-2 text-emerald-300 text-sm"><CheckCircle2 size={15} />{success}</div>}
+          {/* Form body */}
+          <div className="p-7">
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <>
-                <div>
-                  <label className="auth-label">Nama Lengkap</label>
-                  <div className="relative"><User size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400" />
-                    <input type="text" required placeholder="Budi Santoso" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="auth-input pl-10" />
-                  </div>
-                </div>
-                <div>
-                  <label className="auth-label">No. Telepon (opsional)</label>
-                  <div className="relative"><Phone size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400" />
-                    <input type="tel" placeholder="08xxxxxxxxxx" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="auth-input pl-10" />
-                  </div>
-                </div>
-              </>
+            {error && (
+              <div className="mb-5 flex items-start gap-2.5 text-sm px-4 py-3 rounded-2xl"
+                style={{ background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.22)', color:'#fca5a5' }}>
+                <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
             )}
-            <div>
-              <label className="auth-label">Email</label>
-              <div className="relative"><Mail size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400" />
-                <input type="email" required placeholder="email@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="auth-input pl-10" />
+            {success && (
+              <div className="mb-5 flex items-start gap-2.5 text-sm px-4 py-3 rounded-2xl"
+                style={{ background:'rgba(16,185,129,0.12)', border:'1px solid rgba(16,185,129,0.22)', color:'#6ee7b7' }}>
+                <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                <span>{success}</span>
               </div>
-            </div>
-            <div>
-              <label className="auth-label">Password</label>
-              <div className="relative"><Lock size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-400" />
-                <input type={showPass ? 'text' : 'password'} required placeholder="min. 6 karakter" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="auth-input pl-10 pr-12" />
-                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400 hover:text-white transition-colors">
-                  {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+
+              {mode === 'register' && (
+                <>
+                  <div>
+                    <label className="auth-label">Nama Lengkap</label>
+                    <div className="relative">
+                      <User size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                      <input type="text" required placeholder="Budi Santoso" value={form.name}
+                        onChange={e => setForm({ ...form, name: e.target.value })} className="auth-input pl-10" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="auth-label">
+                      No. Telepon
+                      <span className="ml-1.5 normal-case font-medium" style={{ color:'rgba(165,180,252,0.4)', letterSpacing:0 }}>opsional</span>
+                    </label>
+                    <div className="relative">
+                      <Phone size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                      <input type="tel" placeholder="08xxxxxxxxxx" value={form.phone}
+                        onChange={e => setForm({ ...form, phone: e.target.value })} className="auth-input pl-10" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="auth-label">Email</label>
+                <div className="relative">
+                  <Mail size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                  <input type="email" required placeholder="email@example.com" value={form.email}
+                    onChange={e => setForm({ ...form, email: e.target.value })} className="auth-input pl-10" />
+                </div>
               </div>
-            </div>
-            <button type="submit" disabled={loading}
-              className="w-full py-4 bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl font-bold transition-all shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2">
-              {loading ? <><Loader2 size={17} className="animate-spin" />Memproses...</> : mode === 'login' ? 'Masuk' : 'Buat Akun'}
-            </button>
-          </form>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="auth-label" style={{ marginBottom:0 }}>Password</label>
+                  {mode === 'login' && (
+                    <span className="text-[10px] font-semibold cursor-pointer"
+                      style={{ color:'rgba(165,180,252,0.45)' }}>
+                      Lupa password?
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock size={15} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color:'#818cf8' }} />
+                  <input type={showPass ? 'text' : 'password'} required placeholder="min. 6 karakter"
+                    value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                    className="auth-input pl-10 pr-12" />
+                  <button type="button" onClick={() => setShowPass(!showPass)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors"
+                    style={{ color:'rgba(165,180,252,0.5)' }}>
+                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  marginTop:8, padding:'15px 24px', borderRadius:16,
+                  background: loading ? 'rgba(99,102,241,0.5)' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  color:'#fff',
+                  boxShadow: loading ? 'none' : '0 8px 24px rgba(99,102,241,0.35), 0 2px 8px rgba(0,0,0,0.3)',
+                  letterSpacing:'0.01em'
+                }}>
+                {loading
+                  ? <><Loader2 size={16} className="animate-spin" />Memproses...</>
+                  : mode === 'login'
+                    ? <><span style={{ fontSize:14, marginRight:2 }}>→</span> Masuk ke Akun</>
+                    : <><span style={{ fontSize:14, marginRight:2 }}>✦</span> Buat Akun Gratis</>
+                }
+              </button>
+            </form>
+
+            <p className="text-center mt-5 text-xs" style={{ color:'rgba(165,180,252,0.35)' }}>
+              {mode === 'login' ? 'Belum punya akun? ' : 'Sudah punya akun? '}
+              <button onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
+                className="font-bold transition-colors"
+                style={{ color:'rgba(165,180,252,0.65)' }}>
+                {mode === 'login' ? 'Daftar sekarang' : 'Masuk'}
+              </button>
+            </p>
+          </div>
         </div>
+
+        <p className="text-center mt-5 flex items-center justify-center gap-1.5 text-xs"
+          style={{ color:'rgba(165,180,252,0.25)' }}>
+          <span>🔒</span> Data tersimpan aman &amp; terenkripsi
+        </p>
       </div>
     </div>
   );
@@ -2497,7 +2609,7 @@ const NotifPanel = ({ notifications, onMarkAllRead, onClearAll, onMarkOneRead })
   const typeIcon = { success: CheckCircle2, warning: AlertCircle, info: Info };
   const typeColor = { success: 'text-emerald-500', warning: 'text-amber-500', info: 'text-indigo-500' };
   return (
-    <div className="absolute right-0 top-14 w-[calc(100vw-2rem)] sm:w-96 max-w-[24rem] bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50">
+    <div className="fixed right-4 top-[68px] w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-50">
       <div className="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
         <span className="font-black text-slate-800">Notifikasi
           <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full ml-2">{notifications.filter(n => n.unread).length}</span>
