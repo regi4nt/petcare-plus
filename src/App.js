@@ -642,6 +642,131 @@ const PWAInstallButton = ({ platform, deferredPrompt, triggerInstall, isInstalle
   );
 };
 
+// ─── RESET PASSWORD PAGE ───────────────────────────────────────────────
+const ResetPasswordPage = ({ onDone }) => {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setSuccess('');
+    if (password.length < 6) { setError('Password minimal 6 karakter'); return; }
+    if (password !== confirm) { setError('Konfirmasi password tidak cocok'); return; }
+    setLoading(true);
+    try {
+      await authService.updatePassword(password);
+      setSuccess('Password berhasil diubah! Anda akan diarahkan ke aplikasi...');
+      setTimeout(() => onDone(), 2000);
+    } catch (err) {
+      setError(err.message || 'Gagal mengubah password');
+    } finally { setLoading(false); }
+  };
+
+  const getStrength = () => {
+    if (password.length < 6) return 0;
+    if (password.length >= 12 && /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9]/.test(password)) return 4;
+    if (password.length >= 10 && /[A-Z]/.test(password) && /[0-9]/.test(password)) return 3;
+    if (password.length >= 8) return 2;
+    return 1;
+  };
+  const strengthLabel = ['Terlalu pendek','Lemah','Cukup','Sedang','Kuat'];
+  const strengthColor = ['rgba(255,255,255,0.1)','#ef4444','#f97316','#eab308','#22c55e'];
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #06081a 0%, #0d1035 40%, #0f0a2e 100%)' }}>
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div style={{ position:'absolute', top:'-10%', right:'-5%', width:'45vw', height:'45vw', maxWidth:480, maxHeight:480, background:'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 70%)', borderRadius:'50%', filter:'blur(40px)' }} />
+        <div style={{ position:'absolute', bottom:'-10%', left:'-5%', width:'40vw', height:'40vw', maxWidth:420, maxHeight:420, background:'radial-gradient(circle, rgba(139,92,246,0.14) 0%, transparent 70%)', borderRadius:'50%', filter:'blur(40px)' }} />
+        <div style={{ position:'absolute', inset:0, backgroundImage:'radial-gradient(rgba(165,180,252,0.06) 1px, transparent 1px)', backgroundSize:'32px 32px' }} />
+      </div>
+      <div className="w-full max-w-[400px] relative z-10">
+        <div className="text-center mb-8">
+          <div className="relative inline-flex items-center justify-center mb-5">
+            <div style={{ position:'absolute', inset:'-8px', background:'radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 70%)', borderRadius:28, filter:'blur(12px)' }} />
+            <img src="/logo.svg" alt="PetCare+" className="relative rounded-[22px]"
+              style={{ width:72, height:72, boxShadow:'0 0 0 1px rgba(165,180,252,0.15), 0 20px 40px rgba(0,0,0,0.5)' }} />
+          </div>
+          <h1 className="text-[32px] font-black text-white tracking-tight leading-none mb-2">
+            PetCare<span style={{ color:'#818cf8' }}>+</span>
+          </h1>
+          <p className="text-sm font-medium" style={{ color:'rgba(165,180,252,0.6)' }}>Buat password baru Anda</p>
+        </div>
+        <div style={{ background:'rgba(255,255,255,0.05)', backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', border:'1px solid rgba(255,255,255,0.09)', borderRadius:28, overflow:'hidden', boxShadow:'0 32px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04) inset' }}>
+          <div className="flex items-center justify-center gap-2.5 py-4" style={{ borderBottom:'1px solid rgba(255,255,255,0.07)' }}>
+            <Lock size={15} style={{ color:'#818cf8' }} />
+            <span className="text-sm font-bold text-white">Buat Password Baru</span>
+          </div>
+          <div className="p-7">
+            {error && (
+              <div className="mb-5 flex items-start gap-2.5 text-sm px-4 py-3 rounded-2xl"
+                style={{ background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.22)', color:'#fca5a5' }}>
+                <AlertCircle size={15} className="mt-0.5 shrink-0" /><span>{error}</span>
+              </div>
+            )}
+            {success && (
+              <div className="mb-5 flex items-start gap-2.5 text-sm px-4 py-3 rounded-2xl"
+                style={{ background:'rgba(16,185,129,0.12)', border:'1px solid rgba(16,185,129,0.22)', color:'#6ee7b7' }}>
+                <CheckCircle2 size={15} className="mt-0.5 shrink-0" /><span>{success}</span>
+              </div>
+            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="auth-label">Password Baru</label>
+                <div className="auth-field">
+                  <span className="auth-field-icon"><Lock size={16} /></span>
+                  <input type={showPass ? 'text' : 'password'} required placeholder="min. 6 karakter"
+                    value={password} onChange={e => setPassword(e.target.value)} className="auth-input" />
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="auth-input-right transition-colors"
+                    style={{ color:'rgba(165,180,252,0.5)', background:'none', border:'none', cursor:'pointer' }}>
+                    {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              {password.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex gap-1">
+                    {[1,2,3,4].map(lvl => (
+                      <div key={lvl} className="flex-1 h-1 rounded-full transition-all duration-300"
+                        style={{ background: lvl <= getStrength() ? strengthColor[getStrength()] : 'rgba(255,255,255,0.1)' }} />
+                    ))}
+                  </div>
+                  <p className="text-[10px]" style={{ color:'rgba(165,180,252,0.45)' }}>{strengthLabel[getStrength()]}</p>
+                </div>
+              )}
+              <div>
+                <label className="auth-label">Konfirmasi Password</label>
+                <div className="auth-field" style={ confirm.length > 0 ? { borderColor: confirm === password ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)' } : {} }>
+                  <span className="auth-field-icon"><Lock size={16} /></span>
+                  <input type={showConfirm ? 'text' : 'password'} required placeholder="ulangi password baru"
+                    value={confirm} onChange={e => setConfirm(e.target.value)} className="auth-input" />
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="auth-input-right transition-colors"
+                    style={{ color:'rgba(165,180,252,0.5)', background:'none', border:'none', cursor:'pointer' }}>
+                    {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {confirm.length > 0 && confirm !== password && (
+                  <p className="text-[10px] mt-1.5" style={{ color:'#fca5a5' }}>Password tidak cocok</p>
+                )}
+              </div>
+              <button type="submit" disabled={loading || !!success}
+                className="w-full flex items-center justify-center gap-2 font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ marginTop:8, padding:'15px 24px', borderRadius:16, background: loading ? 'rgba(99,102,241,0.5)' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color:'#fff', boxShadow: loading ? 'none' : '0 8px 24px rgba(99,102,241,0.35), 0 2px 8px rgba(0,0,0,0.3)', letterSpacing:'0.01em' }}>
+                {loading ? <><Loader2 size={16} className="animate-spin" />Menyimpan...</> : <><CheckCircle2 size={15} /> Simpan Password Baru</>}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── AUTH PAGE ────────────────────────────────────────────────────────
 const AuthPage = () => {
   const [mode, setMode] = useState('login');
@@ -3282,6 +3407,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
 // ─── MAIN APP ─────────────────────────────────────────────────────────
 export default function App() {
   const [session, setSession] = useState(null);
+  const [isRecovery, setIsRecovery] = useState(false);
   const [profile, setProfile] = useState(null);
   const [pets, setPets] = useState([]);
   const [selectedPet, setSelectedPet] = useState(null);
@@ -3342,10 +3468,40 @@ export default function App() {
 
   // Auth state
   useEffect(() => {
-    authService.getSession().then(s => { setSession(s); setLoading(false); });
-    const { data: { subscription } } = authService.onAuthChange((_e, s) => { setSession(s); setLoading(false); });
+    // Cek URL hash dulu — Supabase reset password mengirim #type=recovery di URL
+    const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+    const urlType = hashParams.get('type');
+
+    if (urlType === 'recovery') {
+      // Biarkan onAuthChange handle session dari URL hash,
+      // tandai langsung sebagai recovery agar tidak flash ke dashboard
+      setIsRecovery(true);
+    }
+
+    // Subscribe dulu sebelum getSession supaya PASSWORD_RECOVERY event tidak terlewat
+    const { data: { subscription } } = authService.onAuthChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+        setSession(s);
+        setLoading(false);
+      } else if (event === 'SIGNED_IN' && isRecovery) {
+        // Jangan clear isRecovery saat signed_in terjadi bersamaan dengan recovery
+        setSession(s);
+        setLoading(false);
+      } else {
+        setIsRecovery(false);
+        setSession(s);
+        setLoading(false);
+      }
+    });
+
+    // Baca session yang sudah ada (non-recovery flow)
+    if (urlType !== 'recovery') {
+      authService.getSession().then(s => { setSession(s); setLoading(false); });
+    }
+
     return () => subscription.unsubscribe();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load all data
   useEffect(() => {
@@ -3505,6 +3661,10 @@ export default function App() {
   if (loading) return null;
 
   // Render auth page if not logged in
+  if (isRecovery && session) return <ResetPasswordPage onDone={() => {
+    window.history.replaceState(null, '', window.location.pathname);
+    setIsRecovery(false);
+  }} />;
   if (!session) return <AuthPage />;
 
   const NAV = [

@@ -82,6 +82,16 @@ body {
   flex-shrink: 0;
 }
 .auth-input::placeholder { color: rgba(165,180,252,0.4); }
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus,
+.auth-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 999px rgba(30, 27, 75, 0.01) inset !important;
+  box-shadow: 0 0 0 999px rgba(30, 27, 75, 0.01) inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background-color: transparent !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
 .auth-label {
   display: block;
   font-size: 10px;

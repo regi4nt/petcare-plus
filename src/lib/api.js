@@ -43,9 +43,17 @@ export const authService = {
   },
 
   async resetPassword(email) {
+    // redirectTo harus sama persis dengan URL yang di-whitelist
+    // di Supabase Dashboard > Authentication > URL Configuration
+    const redirectTo = window.location.origin + window.location.pathname;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo,
     });
+    if (error) throw error;
+  },
+
+  async updatePassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) throw error;
   },
 };
