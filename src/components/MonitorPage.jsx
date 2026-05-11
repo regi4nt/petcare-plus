@@ -328,6 +328,119 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
             </div>
           )}
 
+          {/* ── TABEL RIWAYAT DATA ── */}
+          {history.length > 0 && (
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+              {/* Header */}
+              <div className="px-5 py-4 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600">
+                <div className="flex items-center gap-2">
+                  <Activity size={16} className="text-white" />
+                  <span className="text-sm font-black uppercase tracking-widest text-white">
+                    Riwayat Data Monitoring
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-white/20 text-white">
+                  {history.length} rekaman
+                </span>
+              </div>
+
+              {/* Table wrapper dengan scroll horizontal untuk mobile */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="text-left px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap">Waktu</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-black text-amber-500 uppercase tracking-wider whitespace-nowrap">🌡 Suhu (°C)</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-black text-rose-500 uppercase tracking-wider whitespace-nowrap">❤️ BPM</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-black text-sky-500 uppercase tracking-wider whitespace-nowrap">💧 SpO₂ (%)</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-black text-emerald-500 uppercase tracking-wider whitespace-nowrap">🔋 Baterai (%)</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-black text-violet-500 uppercase tracking-wider whitespace-nowrap">📡 Gerak (mg)</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider whitespace-nowrap">Mode</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...history].reverse().map((row, i) => {
+                      const mag = (() => {
+                        const ax = parseFloat(row.ax), ay = parseFloat(row.ay), az = parseFloat(row.az);
+                        if (isNaN(ax) && isNaN(ay) && isNaN(az)) return null;
+                        return Math.sqrt((isNaN(ax)?0:ax)**2 + (isNaN(ay)?0:ay)**2 + (isNaN(az)?0:az)**2).toFixed(0);
+                      })();
+
+                      const suhu = row.suhu != null ? parseFloat(row.suhu).toFixed(1) : null;
+                      const hr   = row.heart_rate != null ? parseFloat(row.heart_rate).toFixed(0) : null;
+                      const spo2 = row.spo2 != null ? parseFloat(row.spo2).toFixed(1) : null;
+                      const bat  = row.battery_level != null ? parseFloat(row.battery_level).toFixed(0) : null;
+
+                      // Status warna suhu
+                      const suhuColor = suhu == null ? '' : suhu < 37.5 ? 'text-sky-600' : suhu <= 39.5 ? 'text-emerald-600' : 'text-rose-600';
+                      const hrColor   = hr == null ? '' : hr < 60 ? 'text-sky-600' : hr <= 120 ? 'text-emerald-600' : 'text-rose-600';
+                      const batColor  = bat == null ? '' : bat < 10 ? 'text-rose-600' : bat < 20 ? 'text-amber-600' : 'text-emerald-600';
+
+                      const waktu = row.created_at
+                        ? new Date(row.created_at).toLocaleString('id-ID', {
+                            day: '2-digit', month: '2-digit', year: '2-digit',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit',
+                          })
+                        : '—';
+
+                      return (
+                        <tr
+                          key={row.id ?? i}
+                          className={`border-b border-slate-50 transition-colors hover:bg-indigo-50/40 ${i === 0 ? 'bg-indigo-50/60 font-semibold' : ''}`}
+                        >
+                          <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap font-mono">
+                            {i === 0 && (
+                              <span className="inline-block mr-1.5 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[9px] font-black rounded-full uppercase">Terbaru</span>
+                            )}
+                            {waktu}
+                          </td>
+                          <td className={`px-4 py-2.5 text-center font-bold ${suhuColor || 'text-slate-400'}`}>
+                            {suhu ?? <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className={`px-4 py-2.5 text-center font-bold ${hrColor || 'text-slate-400'}`}>
+                            {hr ?? <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-bold text-sky-700">
+                            {spo2 ?? <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className={`px-4 py-2.5 text-center font-bold ${batColor || 'text-slate-400'}`}>
+                            {bat != null ? (
+                              <span className="inline-flex items-center gap-1">
+                                {bat}
+                                <span className="w-8 h-1.5 rounded-full bg-slate-100 inline-block overflow-hidden align-middle">
+                                  <span
+                                    className={`h-full block rounded-full ${parseInt(bat) < 10 ? 'bg-rose-400' : parseInt(bat) < 20 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                                    style={{ width: `${bat}%` }}
+                                  />
+                                </span>
+                              </span>
+                            ) : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-bold text-violet-600">
+                            {mag ?? <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${row.mode === 'kandang' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                              {row.mode === 'kandang' ? '🏠 Kandang' : '🏷 Kalung'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Footer — legenda warna */}
+              <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-3 text-[10px] text-slate-500 font-semibold">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"/>Normal</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-400 inline-block"/>Rendah</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block"/>Tinggi / Kritis</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"/>Perlu Perhatian</span>
+              </div>
+            </div>
+          )}
+
           {/* ── STATUS KONEKSI PERANGKAT ── */}
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
             {/* Header strip biru/indigo — selalu konsisten */}

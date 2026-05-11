@@ -2569,17 +2569,23 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
     return data;
   };
 
+  // Helper: escape a single CSV cell value
+  const escapeCSVCell = (val) => {
+    const str = String(val ?? '');
+    if (str.includes(',') || str.includes('\n') || str.includes('"') || str !== str.trim()) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
   const toCSV = (rows, label) => {
     if (!rows || rows.length === 0) return '';
     const keys = Object.keys(rows[0]);
-    const header = keys.join(',');
+    const header = keys.map(escapeCSVCell).join(',');
     const body = rows.map(row =>
-      keys.map(k => {
-        const val = String(row[k] ?? '').replace(/"/g, '""');
-        return val.includes(',') || val.includes('\n') || val.includes('"') ? `"${val}"` : val;
-      }).join(',')
+      keys.map(k => escapeCSVCell(row[k])).join(',')
     ).join('\n');
-    return `### ${label} ###\n${header}\n${body}\n\n`;
+    return `"=== ${label} ===",\n${header}\n${body}\n\n`;
   };
 
   const handleDownload = () => {
@@ -2741,16 +2747,27 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
           });
           return;
         } else {
-          let csv = `Data Ekspor PetCare+ — ${new Date().toLocaleString('id-ID')} | Rentang: ${getDateRange().label}\n\n`;
+          // BOM agar Excel buka UTF-8 dengan benar (karakter Indonesia tidak rusak)
+          const BOM = '\uFEFF';
+          const rangeLabel = getDateRange().label;
+          const exportDate = new Date().toLocaleString('id-ID');
+
+          // Baris metadata — satu kolom, tidak merusak tabel di bawahnya
+          let csv = BOM;
+          csv += `"PetCare+ — Ekspor Data","${exportDate}","Rentang: ${rangeLabel}"\n\n`;
+
           if (data.profil_pengguna) {
-            csv += '### Profil Pengguna ###\n';
-            csv += Object.entries(data.profil_pengguna).map(([k, v]) => `${k},${v}`).join('\n');
+            csv += '"=== Profil Pengguna ===",\n';
+            csv += '"Field","Nilai"\n';
+            csv += Object.entries(data.profil_pengguna)
+              .map(([k, v]) => `${escapeCSVCell(k)},${escapeCSVCell(v)}`)
+              .join('\n');
             csv += '\n\n';
           }
           if (data.daftar_hewan) csv += toCSV(data.daftar_hewan, 'Daftar Hewan');
           if (data.jadwal_kegiatan) csv += toCSV(data.jadwal_kegiatan, 'Jadwal Kegiatan');
           if (data.rekam_medis) csv += toCSV(data.rekam_medis, 'Rekam Medis');
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); // BOM already prepended
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
