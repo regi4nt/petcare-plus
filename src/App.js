@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+// jsPDF loaded dynamically via CDN in handleDownload
 import { createPortal } from 'react-dom';
 import {
   HeartPulse, LayoutDashboard, Calendar, Activity, Settings, Bell,
@@ -2429,13 +2430,20 @@ const TipsPage = ({ selectedPet, records }) => {
 };
 
 // ─── SETTINGS PAGE ────────────────────────────────────────────────────
-const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet, darkMode, onToggleDark, notifSettings, onSaveNotifSettings, pwaInstall }) => {
+const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet, darkMode, onToggleDark, notifSettings, onSaveNotifSettings, pwaInstall, schedules, records }) => {
   const [section, setSection] = useState('profile');
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: profile?.name || '', phone: profile?.phone || '' });
   const [saving, setSaving] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
   const [openTutorial, setOpenTutorial] = useState(null);
+  const [downloadFormat, setDownloadFormat] = useState('json');
+  const [downloadSelection, setDownloadSelection] = useState({ pets: true, schedules: true, records: true, profile: true });
+  const [downloading, setDownloading] = useState(false);
+  const [downloadDone, setDownloadDone] = useState(false);
+  const [downloadQuickRange, setDownloadQuickRange] = useState('all');
+  const [downloadCustomStart, setDownloadCustomStart] = useState('');
+  const [downloadCustomEnd, setDownloadCustomEnd] = useState('');
   const [revealWa, setRevealWa] = useState(false);
   const [revealEmail, setRevealEmail] = useState(false);
   const [pushPermission, setPushPermission] = useState(() =>
@@ -2453,6 +2461,316 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
     setPushPermission(result);
   };
 
+  // ── Download Data Helpers ──────────────────────────────────────────
+
+  // Hitung rentang tanggal berdasarkan pilihan cepat atau kustom
+  const getDateRange = () => {
+    const now = new Date();
+    if (downloadQuickRange === 'custom') {
+      return {
+        start: downloadCustomStart ? new Date(downloadCustomStart + 'T00:00:00') : null,
+        end:   downloadCustomEnd   ? new Date(downloadCustomEnd   + 'T23:59:59') : null,
+        label: downloadCustomStart && downloadCustomEnd
+          ? `${downloadCustomStart} s/d ${downloadCustomEnd}`
+          : downloadCustomStart ? `Sejak ${downloadCustomStart}`
+          : downloadCustomEnd   ? `Hingga ${downloadCustomEnd}`
+          : 'Semua Data',
+      };
+    }
+    if (downloadQuickRange === '30d') {
+      const start = new Date(now); start.setDate(start.getDate() - 30); start.setHours(0,0,0,0);
+      return { start, end: now, label: '30 Hari Terakhir' };
+    }
+    if (downloadQuickRange === '3m') {
+      const start = new Date(now); start.setMonth(start.getMonth() - 3); start.setHours(0,0,0,0);
+      return { start, end: now, label: '3 Bulan Terakhir' };
+    }
+    if (downloadQuickRange === 'year') {
+      const start = new Date(now.getFullYear(), 0, 1);
+      return { start, end: now, label: `Tahun ${now.getFullYear()}` };
+    }
+    return { start: null, end: null, label: 'Semua Data' };
+  };
+
+  const filterByDate = (items, dateField) => {
+    const { start, end } = getDateRange();
+    if (!start && !end) return items;
+    return (items || []).filter(item => {
+      const d = item[dateField] ? new Date(item[dateField]) : null;
+      if (!d) return true;
+      if (start && d < start) return false;
+      if (end   && d > end)   return false;
+      return true;
+    });
+  };
+
+  const buildExportData = () => {
+    const data = {};
+    const { label: rangeLabel } = getDateRange();
+    if (downloadSelection.profile) {
+      data.profil_pengguna = {
+        nama: profile?.name || '-',
+        email: user?.email || '-',
+        telepon: profile?.phone || '-',
+        role: profile?.role || 'Basic',
+        rentang_data: rangeLabel,
+        tanggal_ekspor: new Date().toLocaleString('id-ID'),
+      };
+    }
+    if (downloadSelection.pets) {
+      data.daftar_hewan = (pets || []).map(p => ({
+        id: p.id,
+        nama: p.name,
+        spesies: p.species,
+        ras: p.breed || '-',
+        usia: p.age != null ? `${p.age} ${p.age_unit || 'tahun'}` : '-',
+        berat_kg: p.weight || '-',
+        gender: p.gender || '-',
+        device_id: p.device_id || '-',
+        catatan: p.notes || '-',
+      }));
+    }
+    if (downloadSelection.schedules) {
+      const filtered = filterByDate(schedules, 'date');
+      data.jadwal_kegiatan = filtered.map(s => {
+        const petName = (pets || []).find(p => p.id === s.pet_id)?.name || '-';
+        return {
+          id: s.id,
+          hewan: petName,
+          judul: s.title,
+          jenis: s.type,
+          tanggal: s.date,
+          waktu: s.time,
+          pengulangan: s.repeat || 'none',
+          selesai: s.done ? 'Ya' : 'Tidak',
+          catatan: s.notes || '-',
+        };
+      });
+    }
+    if (downloadSelection.records) {
+      const filtered = filterByDate(records, 'date');
+      data.rekam_medis = filtered.map(r => {
+        const petName = (pets || []).find(p => p.id === r.pet_id)?.name || '-';
+        return {
+          id: r.id,
+          hewan: petName,
+          judul: r.title,
+          jenis: r.type,
+          tanggal: r.date,
+          berat_saat_itu_kg: r.weight || '-',
+          deskripsi: r.description || '-',
+          dokter: r.vet_name || '-',
+          klinik: r.clinic || '-',
+          kunjungan_berikutnya: r.next_visit || '-',
+          obat: r.medication || '-',
+        };
+      });
+    }
+    return data;
+  };
+
+  const toCSV = (rows, label) => {
+    if (!rows || rows.length === 0) return '';
+    const keys = Object.keys(rows[0]);
+    const header = keys.join(',');
+    const body = rows.map(row =>
+      keys.map(k => {
+        const val = String(row[k] ?? '').replace(/"/g, '""');
+        return val.includes(',') || val.includes('\n') || val.includes('"') ? `"${val}"` : val;
+      }).join(',')
+    ).join('\n');
+    return `### ${label} ###\n${header}\n${body}\n\n`;
+  };
+
+  const handleDownload = () => {
+    setDownloading(true);
+    setDownloadDone(false);
+    setTimeout(() => {
+      try {
+        const data = buildExportData();
+        const ts = new Date().toISOString().slice(0, 10);
+        const rangeSuffix = downloadQuickRange !== 'all' ? `-${downloadQuickRange}` : '';
+        if (downloadFormat === 'json') {
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `petcare-data-${ts}${rangeSuffix}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setDownloadDone(true);
+        } else if (downloadFormat === 'pdf') {
+          // Load jsPDF from CDN dynamically
+          const loadJsPDF = () => new Promise((resolve, reject) => {
+            if (window.jspdf) { resolve(window.jspdf.jsPDF); return; }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            script.onload = () => resolve(window.jspdf.jsPDF);
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+          loadJsPDF().then(jsPDF => {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const margin = 14;
+            const colW = pageW - margin * 2;
+            let y = 0;
+
+            const checkPage = (needed = 10) => {
+              if (y + needed > 275) { doc.addPage(); y = 20; }
+            };
+
+            // Header
+            doc.setFillColor(99, 102, 241);
+            doc.rect(0, 0, pageW, 28, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(18);
+            doc.text('PetCare+', margin, 13);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Laporan Data Hewan Peliharaan', margin, 20);
+            const nowStr = new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
+            doc.text(`Dicetak: ${nowStr}`, pageW - margin, 20, { align: 'right' });
+            doc.text(`Rentang: ${getDateRange().label}`, pageW - margin, 14, { align: 'right' });
+
+            y = 36;
+            doc.setTextColor(30, 30, 30);
+
+            const sectionTitle = (title) => {
+              checkPage(14);
+              doc.setFillColor(238, 239, 255);
+              doc.roundedRect(margin, y, colW, 9, 2, 2, 'F');
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(10);
+              doc.setTextColor(79, 70, 229);
+              doc.text(title, margin + 3, y + 6.2);
+              doc.setTextColor(30, 30, 30);
+              y += 12;
+            };
+
+            const labelValue = (label, value) => {
+              checkPage(7);
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(8.5);
+              doc.text(`${label}:`, margin, y);
+              doc.setFont('helvetica', 'normal');
+              const val = String(value ?? '-');
+              const lines = doc.splitTextToSize(val, colW - 35);
+              doc.text(lines, margin + 35, y);
+              y += lines.length * 5.5 + 1;
+            };
+
+            const tableSection = (rows, columns, title) => {
+              if (!rows || rows.length === 0) return;
+              sectionTitle(title);
+              const cellPad = 2.5;
+              const cw = colW / columns.length;
+              checkPage(10);
+              doc.setFillColor(224, 225, 255);
+              doc.rect(margin, y, colW, 8, 'F');
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(8);
+              doc.setTextColor(55, 48, 163);
+              columns.forEach((col, i) => {
+                doc.text(col.label, margin + i * cw + cellPad, y + 5.5);
+              });
+              doc.setTextColor(30, 30, 30);
+              y += 8;
+              rows.forEach((row, ri) => {
+                const rowVals = columns.map(col => String(row[col.key] ?? '-'));
+                const lineCount = Math.max(...rowVals.map(v => doc.splitTextToSize(v, cw - cellPad * 2).length));
+                const rowH = lineCount * 5 + 4;
+                checkPage(rowH + 2);
+                if (ri % 2 === 0) { doc.setFillColor(248, 248, 255); doc.rect(margin, y, colW, rowH, 'F'); }
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7.5);
+                rowVals.forEach((val, i) => {
+                  const lines = doc.splitTextToSize(val, cw - cellPad * 2);
+                  doc.text(lines, margin + i * cw + cellPad, y + 5);
+                });
+                doc.setDrawColor(220, 220, 240);
+                doc.line(margin, y + rowH, margin + colW, y + rowH);
+                y += rowH;
+              });
+              y += 6;
+            };
+
+            if (data.profil_pengguna) {
+              sectionTitle('Profil Pengguna');
+              Object.entries(data.profil_pengguna).forEach(([k, v]) => labelValue(k, v));
+              y += 4;
+            }
+            if (data.daftar_hewan && data.daftar_hewan.length > 0) {
+              tableSection(data.daftar_hewan, [
+                { label: 'Nama', key: 'nama' }, { label: 'Jenis', key: 'jenis' },
+                { label: 'Ras', key: 'ras' }, { label: 'Tgl Lahir', key: 'tanggal_lahir' },
+                { label: 'Berat (kg)', key: 'berat_kg' },
+              ], 'Daftar Hewan Peliharaan');
+            }
+            if (data.jadwal_kegiatan && data.jadwal_kegiatan.length > 0) {
+              tableSection(data.jadwal_kegiatan, [
+                { label: 'Pet ID', key: 'pet_id' }, { label: 'Kegiatan', key: 'jenis_kegiatan' },
+                { label: 'Jadwal', key: 'jadwal_waktu' }, { label: 'Status', key: 'status' },
+                { label: 'Catatan', key: 'catatan' },
+              ], 'Jadwal Kegiatan');
+            }
+            if (data.rekam_medis && data.rekam_medis.length > 0) {
+              tableSection(data.rekam_medis, [
+                { label: 'Pet ID', key: 'pet_id' }, { label: 'Jenis', key: 'jenis_rekaman' },
+                { label: 'Tanggal', key: 'tanggal_rekaman' }, { label: 'Diagnosis', key: 'diagnosis' },
+                { label: 'Catatan', key: 'catatan' },
+              ], 'Rekam Medis');
+            }
+
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+              doc.setPage(i);
+              doc.setFontSize(7.5);
+              doc.setTextColor(160, 160, 180);
+              doc.text('PetCare+ — Laporan otomatis', margin, 290);
+              doc.text(`Halaman ${i} dari ${pageCount}`, pageW - margin, 290, { align: 'right' });
+            }
+
+            doc.save(`petcare-laporan-${ts}${rangeSuffix}.pdf`);
+            setDownloadDone(true);
+            setDownloading(false);
+          }).catch(() => {
+            alert('Gagal memuat library PDF. Pastikan koneksi internet aktif.');
+            setDownloading(false);
+          });
+          return;
+        } else {
+          let csv = `Data Ekspor PetCare+ — ${new Date().toLocaleString('id-ID')} | Rentang: ${getDateRange().label}\n\n`;
+          if (data.profil_pengguna) {
+            csv += '### Profil Pengguna ###\n';
+            csv += Object.entries(data.profil_pengguna).map(([k, v]) => `${k},${v}`).join('\n');
+            csv += '\n\n';
+          }
+          if (data.daftar_hewan) csv += toCSV(data.daftar_hewan, 'Daftar Hewan');
+          if (data.jadwal_kegiatan) csv += toCSV(data.jadwal_kegiatan, 'Jadwal Kegiatan');
+          if (data.rekam_medis) csv += toCSV(data.rekam_medis, 'Rekam Medis');
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `petcare-data-${ts}${rangeSuffix}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setDownloadDone(true);
+        }
+      } finally {
+        setDownloading(false);
+      }
+    }, 600);
+  };
+
+  const toggleDownloadSel = (key) => {
+    setDownloadSelection(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const countSelected = Object.values(downloadSelection).filter(Boolean).length;
+
   const toggleNotif = (key) => {
     onSaveNotifSettings({ ...notifSettings, [key]: !notifSettings[key] });
   };
@@ -2467,6 +2785,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
   const sections = [
     { id: 'profile',       label: 'Edit Profil',        icon: User },
     { id: 'notifications', label: 'Notifikasi',          icon: Bell },
+    { id: 'download',      label: 'Download Data',       icon: Download },
     { id: 'bantuan',       label: 'Bantuan & Dukungan',  icon: Phone },
     { id: 'app',           label: 'Tentang',             icon: Info },
   ];
@@ -2845,6 +3164,215 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                       )}
                     </div>
                   ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* ── DOWNLOAD DATA ── */}
+          {section === 'download' && (
+            <div className="space-y-4">
+
+              {/* Header Card */}
+              <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[28px] p-6 text-white shadow-lg">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                    <Download size={22} className="text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-lg">Download Data Saya</h4>
+                    <p className="text-indigo-100 text-xs">Ekspor seluruh data hewan & kesehatan</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {[
+                    { label: `${(pets||[]).length} Hewan`, icon: PawPrint },
+                    { label: `${(schedules||[]).length} Jadwal`, icon: Calendar },
+                    { label: `${(records||[]).length} Rekam Medis`, icon: FileText },
+                  ].map(({ label, icon: Icon }) => (
+                    <span key={label} className="flex items-center gap-1.5 bg-white/20 px-3 py-1.5 rounded-full text-xs font-bold">
+                      <Icon size={12} />{label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Pilih Data */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <h4 className="font-bold text-slate-800 mb-1">Pilih Data yang Diunduh</h4>
+                <p className="text-xs text-slate-500 mb-5">Centang kategori data yang ingin disertakan dalam file ekspor.</p>
+                <div className="space-y-3">
+                  {[
+                    { key: 'profile',   label: 'Profil Pengguna',    desc: 'Nama, email, telepon, dan role akun',                    icon: User,      color: 'indigo' },
+                    { key: 'pets',      label: 'Data Hewan Peliharaan', desc: `${(pets||[]).length} hewan: spesies, ras, usia, berat, gender`, icon: PawPrint,  color: 'amber'  },
+                    { key: 'schedules', label: 'Jadwal Kegiatan',     desc: `${(schedules||[]).length} jadwal: makan, vaksinasi, olahraga, dll`, icon: Calendar,  color: 'emerald'},
+                    { key: 'records',   label: 'Rekam Medis',         desc: `${(records||[]).length} catatan: pemeriksaan, vaksinasi, operasi`, icon: FileText,  color: 'rose'   },
+                  ].map(({ key, label, desc, icon: Icon, color }) => {
+                    const active = downloadSelection[key];
+                    const colorMap = {
+                      indigo: { bg: 'bg-indigo-50', icon: 'bg-indigo-100 text-indigo-600', check: 'bg-indigo-600 border-indigo-600', ring: 'ring-indigo-100' },
+                      amber:  { bg: 'bg-amber-50',  icon: 'bg-amber-100 text-amber-600',   check: 'bg-amber-500 border-amber-500',   ring: 'ring-amber-100'  },
+                      emerald:{ bg: 'bg-emerald-50',icon: 'bg-emerald-100 text-emerald-600',check: 'bg-emerald-600 border-emerald-600',ring: 'ring-emerald-100'},
+                      rose:   { bg: 'bg-rose-50',   icon: 'bg-rose-100 text-rose-600',     check: 'bg-rose-500 border-rose-500',     ring: 'ring-rose-100'   },
+                    };
+                    const c = colorMap[color];
+                    return (
+                      <button key={key} onClick={() => toggleDownloadSel(key)}
+                        className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${active ? `${c.bg} border-current ring-2 ${c.ring}` : 'bg-slate-50 border-transparent'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${c.icon}`}>
+                          <Icon size={18} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-800 text-sm">{label}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+                        </div>
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${active ? `${c.check} text-white` : 'border-slate-300 bg-white'}`}>
+                          {active && <Check size={12} strokeWidth={3} />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── FILTER RENTANG TANGGAL ── */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar size={15} className="text-indigo-500" />
+                  <h4 className="font-bold text-slate-800">Filter Rentang Tanggal</h4>
+                </div>
+                <p className="text-xs text-slate-500 mb-4">Batasi data jadwal &amp; rekam medis berdasarkan periode waktu.</p>
+
+                {/* Opsi Cepat */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {[
+                    { key: 'all',    label: '📂 Semua Data',        desc: 'Tanpa batas waktu' },
+                    { key: '30d',    label: '📅 30 Hari Terakhir',  desc: `Sejak ${(() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toLocaleDateString('id-ID',{day:'numeric',month:'short'}); })()}` },
+                    { key: '3m',     label: '🗓️ 3 Bulan Terakhir', desc: `Sejak ${(() => { const d = new Date(); d.setMonth(d.getMonth()-3); return d.toLocaleDateString('id-ID',{day:'numeric',month:'short'}); })()}` },
+                    { key: 'year',   label: `📆 Tahun ${new Date().getFullYear()}`, desc: `1 Jan – Hari ini` },
+                  ].map(({ key, label, desc }) => (
+                    <button key={key} onClick={() => setDownloadQuickRange(key)}
+                      className={`flex flex-col items-start p-3.5 rounded-2xl border-2 text-left transition-all ${downloadQuickRange === key ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                      <p className={`text-xs font-black leading-snug ${downloadQuickRange === key ? 'text-indigo-700' : 'text-slate-700'}`}>{label}</p>
+                      <p className={`text-[10px] mt-0.5 ${downloadQuickRange === key ? 'text-indigo-500' : 'text-slate-400'}`}>{desc}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Rentang Kustom */}
+                <button onClick={() => setDownloadQuickRange('custom')}
+                  className={`w-full flex items-center gap-2 px-4 py-3 rounded-2xl border-2 mb-3 transition-all ${downloadQuickRange === 'custom' ? 'border-violet-500 bg-violet-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${downloadQuickRange === 'custom' ? 'bg-violet-100 text-violet-600' : 'bg-slate-200 text-slate-400'}`}>
+                    <Edit3 size={13} />
+                  </div>
+                  <div className="text-left flex-1">
+                    <p className={`text-xs font-black ${downloadQuickRange === 'custom' ? 'text-violet-700' : 'text-slate-600'}`}>✏️ Rentang Kustom</p>
+                    <p className={`text-[10px] ${downloadQuickRange === 'custom' ? 'text-violet-500' : 'text-slate-400'}`}>Pilih tanggal mulai &amp; akhir sendiri</p>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${downloadQuickRange === 'custom' ? 'border-violet-500 bg-violet-500' : 'border-slate-300'}`}>
+                    {downloadQuickRange === 'custom' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </button>
+
+                {/* Input kustom — hanya muncul saat mode custom */}
+                {downloadQuickRange === 'custom' && (
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Dari Tanggal</label>
+                      <input type="date" value={downloadCustomStart} onChange={e => setDownloadCustomStart(e.target.value)}
+                        max={downloadCustomEnd || undefined}
+                        className="w-full px-3 py-2.5 text-xs font-semibold border-2 border-slate-200 rounded-xl focus:border-violet-400 focus:outline-none bg-slate-50 text-slate-700 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sampai Tanggal</label>
+                      <input type="date" value={downloadCustomEnd} onChange={e => setDownloadCustomEnd(e.target.value)}
+                        min={downloadCustomStart || undefined}
+                        className="w-full px-3 py-2.5 text-xs font-semibold border-2 border-slate-200 rounded-xl focus:border-violet-400 focus:outline-none bg-slate-50 text-slate-700 transition-colors" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Badge ringkasan rentang yang dipilih */}
+                {downloadQuickRange !== 'all' && (
+                  <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
+                    <Clock size={12} className="text-indigo-500 shrink-0" />
+                    <p className="text-xs font-semibold text-indigo-700">
+                      {(() => {
+                        const { label: rl } = getDateRange();
+                        const sched = filterByDate(schedules, 'date').length;
+                        const recs  = filterByDate(records, 'date').length;
+                        return `${rl} · ${sched} jadwal, ${recs} rekam medis`;
+                      })()}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Format */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <h4 className="font-bold text-slate-800 mb-1">Format File</h4>
+                <p className="text-xs text-slate-500 mb-4">Pilih format yang sesuai kebutuhan Anda.</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { fmt: 'json', label: 'JSON', desc: 'Lengkap & terstruktur', icon: FileText, tip: 'Cocok untuk backup data atau developer' },
+                    { fmt: 'csv',  label: 'CSV',  desc: 'Buka di Excel/Sheets',  icon: Activity, tip: 'Cocok untuk analisis spreadsheet' },
+                    { fmt: 'pdf',  label: 'PDF',  desc: 'Laporan siap cetak',     icon: FileText, tip: 'Cocok untuk laporan & arsip dokumen' },
+                  ].map(({ fmt, label, desc, icon: FIcon, tip }) => (
+                    <button key={fmt} onClick={() => setDownloadFormat(fmt)}
+                      className={`flex flex-col items-start p-4 rounded-2xl border-2 text-left transition-all ${downloadFormat === fmt ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'}`}>
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${downloadFormat === fmt ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
+                        <FIcon size={16} />
+                      </div>
+                      <p className={`font-black text-sm ${downloadFormat === fmt ? 'text-indigo-700' : 'text-slate-700'}`}>.{label}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+                      <p className="text-[10px] text-slate-400 mt-1 leading-tight">{tip}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Download Button */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="font-bold text-slate-800 text-sm">{countSelected} kategori dipilih</p>
+                    <p className="text-xs text-slate-500">Format: .{downloadFormat.toUpperCase()} · {getDateRange().label}</p>
+                  </div>
+                  {downloadDone && (
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full">
+                      <CheckCircle2 size={13} /> Berhasil diunduh
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleDownload}
+                  disabled={downloading || countSelected === 0}
+                  className="w-full flex items-center justify-center gap-2 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-sm transition-all shadow-md shadow-indigo-200"
+                >
+                  {downloading
+                    ? <><Loader2 size={16} className="animate-spin" /> Menyiapkan data...</>
+                    : <><Download size={16} /> Unduh Data Sekarang</>
+                  }
+                </button>
+                {countSelected === 0 && (
+                  <p className="text-xs text-center text-rose-500 mt-3 font-medium">Pilih minimal satu kategori data terlebih dahulu.</p>
+                )}
+                <p className="text-[10px] text-slate-400 text-center mt-3 leading-relaxed">
+                  Data diunduh langsung ke perangkat Anda. Tidak ada data yang dikirim ke server pihak ketiga.
+                </p>
+              </div>
+
+              {/* Info */}
+              <div className="bg-amber-50 border border-amber-100 rounded-[28px] p-5">
+                <div className="flex items-start gap-3">
+                  <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-amber-800 text-sm mb-1">Informasi Privasi</p>
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      File yang diunduh berisi data pribadi hewan dan kesehatan Anda. Simpan file ini dengan aman dan jangan bagikan kepada pihak yang tidak dipercaya.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -3901,7 +4429,7 @@ export default function App() {
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
-              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} />}
+              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} schedules={schedules} records={records} />}
             </div>
           )}
         </div>
