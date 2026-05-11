@@ -3560,7 +3560,11 @@ export default function App() {
     const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
     const urlType = hashParams.get('type');
 
-    if (urlType === 'recovery') {
+    // Gunakan local variable agar closure onAuthChange bisa baca nilai terbaru
+    // (React state tidak bisa dibaca secara real-time di dalam closure)
+    let recoveryDetected = urlType === 'recovery';
+
+    if (recoveryDetected) {
       setIsRecovery(true);
       setShowChoice(true);
     }
@@ -3568,23 +3572,31 @@ export default function App() {
     // Subscribe dulu sebelum getSession supaya PASSWORD_RECOVERY event tidak terlewat
     const { data: { subscription } } = authService.onAuthChange((event, s) => {
       if (event === 'PASSWORD_RECOVERY') {
+        recoveryDetected = true;
         setIsRecovery(true);
         setShowChoice(true);
         setSession(s);
         setLoading(false);
-      } else if (event === 'SIGNED_IN' && isRecovery) {
+      } else if (event === 'SIGNED_IN') {
         setSession(s);
+        if (!recoveryDetected) {
+          // Bukan dari recovery flow — login normal
+          setIsRecovery(false);
+          setShowChoice(false);
+        }
         setLoading(false);
       } else {
-        setIsRecovery(false);
-        setShowChoice(false);
+        if (!recoveryDetected) {
+          setIsRecovery(false);
+          setShowChoice(false);
+        }
         setSession(s);
         setLoading(false);
       }
     });
 
     // Baca session yang sudah ada (non-recovery flow)
-    if (urlType !== 'recovery') {
+    if (!recoveryDetected) {
       authService.getSession().then(s => { setSession(s); setLoading(false); });
     }
 
