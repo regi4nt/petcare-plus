@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService, deviceCommandService } from './lib/api';
 import { HibernationControlModal } from './components/HibernationControl';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────
 const PET_ICONS = {
@@ -3932,6 +3933,7 @@ export default function App() {
       </main>
 
       {showAddPet && <AddPetModal onClose={() => setShowAddPet(false)} onAdd={handleAddPet} loading={petLoading} />}
+      <SpeedInsights />
     </div>
   );
 }
