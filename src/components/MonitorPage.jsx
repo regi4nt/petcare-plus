@@ -153,86 +153,112 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
 
       {loading && !latest ? <Spinner text="Mengambil data sensor dari Supabase..." /> : (
         <>
-          {/* Battery Status Card — selalu tampil */}
-          <div className={`rounded-3xl p-5 border transition-all ${
-            batteryPercent == null
-              ? 'bg-slate-800 border-slate-700'
-              : batteryPercent < 10  ? 'bg-rose-50 border-rose-200'
-              : batteryPercent < 20  ? 'bg-amber-50 border-amber-200'
-              : batteryPercent < 50  ? 'bg-sky-50 border-sky-200'
-              : 'bg-emerald-50 border-emerald-200'
-          }`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <span className="text-3xl leading-none">
-                  {batteryPercent == null ? '🔋' : batteryStatus.icon}
+          {/* ── STATUS BATERAI ── */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* Header strip warna sesuai level */}
+            <div className={`px-5 py-3 flex items-center justify-between ${
+              batteryPercent == null    ? 'bg-slate-100'
+              : batteryPercent < 10    ? 'bg-rose-500'
+              : batteryPercent < 20    ? 'bg-amber-400'
+              : batteryPercent < 50    ? 'bg-sky-400'
+              : 'bg-emerald-500'
+            }`}>
+              <div className="flex items-center gap-2">
+                <Zap size={16} className={batteryPercent == null ? 'text-slate-400' : 'text-white'} />
+                <span className={`text-xs font-black uppercase tracking-widest ${batteryPercent == null ? 'text-slate-500' : 'text-white'}`}>
+                  Daya Baterai
                 </span>
-                <div>
-                  <p className={`font-black text-lg ${
-                    batteryPercent == null ? 'text-slate-400'
-                    : batteryPercent < 10  ? 'text-rose-700'
-                    : batteryPercent < 20  ? 'text-amber-700'
-                    : batteryPercent < 50  ? 'text-sky-700'
-                    : 'text-emerald-700'
-                  }`}>Status Baterai</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Daya perangkat IoT</p>
+              </div>
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                batteryPercent == null    ? 'bg-slate-200 text-slate-500'
+                : batteryPercent < 10    ? 'bg-rose-600 text-white'
+                : batteryPercent < 20    ? 'bg-amber-500 text-white'
+                : batteryPercent < 50    ? 'bg-sky-500 text-white'
+                : 'bg-emerald-600 text-white'
+              }`}>
+                {batteryStatus.label}
+              </span>
+            </div>
+
+            <div className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                {/* Angka persentase besar */}
+                <div className="flex items-end gap-2">
+                  <span className={`text-5xl font-black leading-none ${
+                    batteryPercent == null    ? 'text-slate-300'
+                    : batteryPercent < 10    ? 'text-rose-500'
+                    : batteryPercent < 20    ? 'text-amber-500'
+                    : batteryPercent < 50    ? 'text-sky-500'
+                    : 'text-emerald-500'
+                  }`}>
+                    {batteryPercent != null ? `${batteryPercent.toFixed(0)}` : '—'}
+                  </span>
+                  {batteryPercent != null && (
+                    <span className="text-xl font-bold text-slate-400 mb-1">%</span>
+                  )}
+                </div>
+                {/* Ikon baterai visual */}
+                <div className={`w-14 h-7 rounded-md border-2 relative flex items-center px-0.5 ${
+                  batteryPercent == null    ? 'border-slate-300'
+                  : batteryPercent < 10    ? 'border-rose-400'
+                  : batteryPercent < 20    ? 'border-amber-400'
+                  : batteryPercent < 50    ? 'border-sky-400'
+                  : 'border-emerald-400'
+                }`}>
+                  {/* terminal baterai */}
+                  <div className={`absolute -right-[5px] top-1/2 -translate-y-1/2 w-1.5 h-3 rounded-r-sm ${
+                    batteryPercent == null ? 'bg-slate-300' : batteryPercent < 10 ? 'bg-rose-400' : batteryPercent < 20 ? 'bg-amber-400' : batteryPercent < 50 ? 'bg-sky-400' : 'bg-emerald-400'
+                  }`} />
+                  <div
+                    className={`h-4 rounded-sm transition-all duration-700 ${
+                      batteryPercent == null    ? 'bg-slate-200'
+                      : batteryPercent < 10    ? 'bg-rose-400'
+                      : batteryPercent < 20    ? 'bg-amber-400'
+                      : batteryPercent < 50    ? 'bg-sky-400'
+                      : 'bg-emerald-400'
+                    }`}
+                    style={{ width: batteryPercent != null ? `${Math.max(batteryPercent, 4)}%` : '0%' }}
+                  />
                 </div>
               </div>
-              <div className="text-right">
-                {batteryPercent != null ? (
-                  <>
-                    <span className={`inline-block text-2xl font-black ${
-                      batteryPercent < 10  ? 'text-rose-600'
-                      : batteryPercent < 20  ? 'text-amber-600'
-                      : batteryPercent < 50  ? 'text-sky-600'
-                      : 'text-emerald-600'
-                    }`}>{batteryPercent.toFixed(0)}%</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ml-1 ${batteryStatus.cls}`}>
-                      {batteryStatus.label}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">
-                    Menunggu data
-                  </span>
-                )}
+
+              {/* Progress bar tipis */}
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${
+                    batteryPercent == null    ? ''
+                    : batteryPercent < 10    ? 'bg-rose-400'
+                    : batteryPercent < 20    ? 'bg-amber-400'
+                    : batteryPercent < 50    ? 'bg-sky-400'
+                    : 'bg-emerald-400'
+                  }`}
+                  style={{ width: batteryPercent != null ? `${batteryPercent}%` : '0%' }}
+                />
               </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px] text-slate-400">0%</span>
+                <span className="text-[10px] text-slate-400">100%</span>
+              </div>
+
+              {/* Placeholder / peringatan */}
+              {batteryPercent == null && (
+                <p className="mt-3 text-xs text-slate-400 flex items-center gap-1.5">
+                  <Zap size={12} /> Menunggu data baterai dari ESP32...
+                </p>
+              )}
+              {batteryPercent != null && batteryPercent < 10 && (
+                <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertCircle size={15} />
+                  ⚡ Baterai kritis! Segera isi ulang atau aktifkan hibernasi.
+                </div>
+              )}
+              {batteryPercent != null && batteryPercent < 20 && batteryPercent >= 10 && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700 font-semibold flex items-center gap-2">
+                  <AlertCircle size={15} />
+                  Baterai rendah. Pertimbangkan mengisi ulang atau atur hibernasi.
+                </div>
+              )}
             </div>
-
-            {/* Battery progress bar */}
-            <div className="w-full h-3 bg-slate-600 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-700 ${
-                  batteryPercent == null ? ''
-                  : batteryPercent < 10  ? 'bg-rose-500'
-                  : batteryPercent < 20  ? 'bg-amber-500'
-                  : batteryPercent < 50  ? 'bg-sky-500'
-                  : 'bg-emerald-500'
-                }`}
-                style={{ width: batteryPercent != null ? `${batteryPercent}%` : '0%' }}
-              />
-            </div>
-
-            {/* Placeholder saat belum ada data */}
-            {batteryPercent == null && (
-              <p className="mt-3 text-xs text-slate-500 flex items-center gap-1.5">
-                <WifiOff size={12} /> Menunggu data baterai dari ESP32...
-              </p>
-            )}
-
-            {/* Warning messages */}
-            {batteryPercent != null && batteryPercent < 10 && (
-              <div className="mt-3 p-3 bg-rose-100 rounded-xl text-sm text-rose-700 font-semibold flex items-center gap-2">
-                <AlertCircle size={16} />
-                ⚡ Baterai kritis! Segera isi ulang atau aktifkan hibernasi untuk menghemat daya.
-              </div>
-            )}
-            {batteryPercent != null && batteryPercent < 20 && batteryPercent >= 10 && (
-              <div className="mt-3 p-3 bg-amber-100 rounded-xl text-sm text-amber-700 font-semibold flex items-center gap-2">
-                <AlertCircle size={16} />
-                Baterai rendah. Pertimbangkan mengisi ulang atau atur hibernasi.
-              </div>
-            )}
           </div>
 
           {/* Vital Signs Stat Cards */}
@@ -302,40 +328,58 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
             </div>
           )}
 
-          {/* Device Info */}
-          <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
-                <Wifi size={16} className="text-slate-400" /> Status Koneksi Perangkat
-              </h3>
-              {lastUpdate && (
-                <span className="text-xs text-slate-400 font-semibold">
-                  Update: {lastUpdate.toLocaleTimeString("id-ID")}
+          {/* ── STATUS KONEKSI PERANGKAT ── */}
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+            {/* Header strip biru/indigo — selalu konsisten */}
+            <div className={`px-5 py-3 flex items-center justify-between ${latest ? 'bg-indigo-600' : 'bg-slate-400'}`}>
+              <div className="flex items-center gap-2">
+                {latest ? <Wifi size={16} className="text-white" /> : <WifiOff size={16} className="text-white" />}
+                <span className="text-xs font-black uppercase tracking-widest text-white">
+                  Koneksi Perangkat
                 </span>
-              )}
+              </div>
+              <div className="flex items-center gap-2">
+                {lastUpdate && (
+                  <span className="text-[10px] text-indigo-200 font-semibold">
+                    Update: {lastUpdate.toLocaleTimeString("id-ID")}
+                  </span>
+                )}
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${latest ? 'bg-emerald-400 text-white' : 'bg-slate-500 text-slate-200'}`}>
+                  {latest ? '🟢 Terhubung' : '🔴 Menunggu'}
+                </span>
+              </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                ["Device ID", latest?.device_id ?? "—"],
-                ["Mode Aktif", mode ? (isKandang ? "Kandang" : "Kalung") : "—"],
-                ["Sumber Mode", modeSource === 'iot' ? "Dari ESP32" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
-                ["Interval Kirim", mode ? (isKandang ? "5 detik" : "15 detik") : "—"],
-                ["Data Tersimpan", history.length + " rekaman"],
-                ["Firmware", "esp32_iot_monitoring v2.1"],
-                ["Database", "Supabase Realtime"],
-                ["Status Koneksi", latest ? "🟢 Terhubung" : "🔴 Menunggu"],
-              ].map(([k, v]) => (
-                <div key={k} className="bg-slate-50 rounded-2xl p-3">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{k}</p>
-                  <p className="font-bold text-slate-700 mt-0.5 text-xs">{v}</p>
-                </div>
-              ))}
-            </div>
-            <div className={`mt-4 flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold ${latest ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-              {latest
-                ? <><Wifi size={14} /> Terhubung — Supabase Realtime aktif, data langsung dari ESP32</>
-                : <><WifiOff size={14} /> Menunggu data dari ESP32. Pastikan PET_ID di firmware sudah diisi.</>
-              }
+
+            <div className="p-5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  ["Device ID",      latest?.device_id ?? "—"],
+                  ["Mode Aktif",     mode ? (isKandang ? "Kandang" : "Kalung") : "—"],
+                  ["Sumber Mode",    modeSource === 'iot' ? "Dari ESP32" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
+                  ["Interval Kirim", mode ? (isKandang ? "5 detik" : "15 detik") : "—"],
+                  ["Data Tersimpan", history.length + " rekaman"],
+                  ["Firmware",       "esp32_iot_monitoring v2.1"],
+                  ["Database",       "Supabase Realtime"],
+                  ["Protokol",       "HTTPS + Realtime WS"],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{k}</p>
+                    <p className="font-bold text-slate-700 mt-0.5 text-xs">{v}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Banner bawah */}
+              <div className={`mt-4 flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold border ${
+                latest
+                  ? 'bg-indigo-50 border-indigo-100 text-indigo-700'
+                  : 'bg-slate-100 border-slate-200 text-slate-500'
+              }`}>
+                {latest
+                  ? <><Wifi size={14} /> Terhubung — Supabase Realtime aktif, data langsung dari ESP32</>
+                  : <><WifiOff size={14} /> Menunggu data dari ESP32. Pastikan PET_ID di firmware sudah diisi.</>
+                }
+              </div>
             </div>
           </div>
 
