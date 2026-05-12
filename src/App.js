@@ -2747,140 +2747,167 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
           });
           return;
         } else {
-          // Export XLSX dengan styling tabel menggunakan SheetJS
-          const loadXLSX = () => new Promise((resolve, reject) => {
-            if (window.XLSX) { resolve(window.XLSX); return; }
+          // Export XLSX dengan styling penuh menggunakan ExcelJS
+          const loadExcelJS = () => new Promise((resolve, reject) => {
+            if (window.ExcelJS) { resolve(window.ExcelJS); return; }
             const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-            script.onload = () => resolve(window.XLSX);
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+            script.onload = () => resolve(window.ExcelJS);
             script.onerror = reject;
             document.head.appendChild(script);
           });
 
-          loadXLSX().then(XLSX => {
+          loadExcelJS().then(async (ExcelJS) => {
             const rangeLabel = getDateRange().label;
             const exportDate = new Date().toLocaleString('id-ID');
-            const wb = XLSX.utils.book_new();
+            const wb = new ExcelJS.Workbook();
+            wb.creator = 'PetCare+';
+            wb.created = new Date();
 
-            // Helper: buat sheet dari array of objects dengan header berwarna
-            const makeSheet = (rows, cols) => {
-              if (!rows || rows.length === 0) return null;
-              const headers = cols.map(c => c.label);
-              const aoaData = [headers, ...rows.map(r => cols.map(c => r[c.key] ?? ''))];
-              const ws = XLSX.utils.aoa_to_sheet(aoaData);
-
-              // Set lebar kolom otomatis
-              ws['!cols'] = cols.map(c => ({ wch: Math.max(c.label.length + 2, 18) }));
-
-              // Style header baris pertama (biru indigo)
-              const headerStyle = {
-                font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
-                fill: { fgColor: { rgb: '4F46E5' } },
-                alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
-                border: {
-                  top: { style: 'thin', color: { rgb: 'FFFFFF' } },
-                  bottom: { style: 'thin', color: { rgb: 'FFFFFF' } },
-                  left: { style: 'thin', color: { rgb: 'FFFFFF' } },
-                  right: { style: 'thin', color: { rgb: 'FFFFFF' } },
-                }
-              };
-              const dataStyle = {
-                alignment: { vertical: 'center', wrapText: true },
-                border: {
-                  top: { style: 'thin', color: { rgb: 'D1D5DB' } },
-                  bottom: { style: 'thin', color: { rgb: 'D1D5DB' } },
-                  left: { style: 'thin', color: { rgb: 'D1D5DB' } },
-                  right: { style: 'thin', color: { rgb: 'D1D5DB' } },
-                }
-              };
-              const dataStyleAlt = {
-                ...dataStyle,
-                fill: { fgColor: { rgb: 'EEF2FF' } }
-              };
-
-              // Apply styles ke header
-              headers.forEach((_, ci) => {
-                const cellRef = XLSX.utils.encode_cell({ r: 0, c: ci });
-                if (!ws[cellRef]) ws[cellRef] = { v: headers[ci] };
-                ws[cellRef].s = headerStyle;
-              });
-
-              // Apply styles ke data rows
-              rows.forEach((_, ri) => {
-                cols.forEach((_, ci) => {
-                  const cellRef = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
-                  if (!ws[cellRef]) ws[cellRef] = { v: '' };
-                  ws[cellRef].s = ri % 2 === 0 ? dataStyle : dataStyleAlt;
-                });
-              });
-
-              // Row height
-              ws['!rows'] = [{ hpt: 22 }, ...rows.map(() => ({ hpt: 18 }))];
-
-              return ws;
+            // warna tema
+            const C = {
+              indigo:      'FF4F46E5', indigoLight: 'FFEDE9FE', indigoDark: 'FF3730A3',
+              white:       'FFFFFFFF', slate50:     'FFF8FAFC', slate100:   'FFF1F5F9',
+              slate200:    'FFE2E8F0', slate600:    'FF475569', slate800:   'FF1E293B',
+              green:       'FF16A34A', greenLight:  'FFdcfce7',
+              purple:      'FF7C3AED', purpleLight: 'FFF5F3FF',
+              orange:      'FFEA580C', orangeLight: 'FFFFF7ED',
             };
 
-            // Sheet 1: Ringkasan / Info
-            const infoData = [
-              ['PetCare+ — Ekspor Data', ''],
-              ['Tanggal Export', exportDate],
-              ['Rentang Data', rangeLabel],
-              ['', ''],
-            ];
+            const hdrStyle = (bgArgb) => ({
+              font:      { bold: true, color: { argb: C.white }, size: 10, name: 'Calibri' },
+              fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } },
+              alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+              border: {
+                top:    { style: 'thin',   color: { argb: 'FF6366F1' } },
+                bottom: { style: 'medium', color: { argb: C.indigoDark } },
+                left:   { style: 'thin',   color: { argb: 'FF6366F1' } },
+                right:  { style: 'thin',   color: { argb: 'FF6366F1' } },
+              },
+            });
+
+            const rowStyle = (even, stripeBg) => ({
+              font:      { size: 9.5, name: 'Calibri', color: { argb: C.slate800 } },
+              fill:      even
+                ? { type: 'pattern', pattern: 'solid', fgColor: { argb: stripeBg } }
+                : { type: 'pattern', pattern: 'solid', fgColor: { argb: C.white } },
+              alignment: { vertical: 'middle', wrapText: true },
+              border: {
+                top:    { style: 'hair', color: { argb: C.slate200 } },
+                bottom: { style: 'hair', color: { argb: C.slate200 } },
+                left:   { style: 'thin', color: { argb: C.slate200 } },
+                right:  { style: 'thin', color: { argb: C.slate200 } },
+              },
+            });
+
+            const addTableSheet = (sheetName, rows, colDefs, accentBg, stripeBg) => {
+              if (!rows || rows.length === 0) return;
+              const ws = wb.addWorksheet(sheetName, {
+                views: [{ state: 'frozen', ySplit: 1 }],
+                properties: { tabColor: { argb: accentBg } },
+              });
+              ws.columns = colDefs.map(c => ({
+                header: c.label, key: c.key,
+                width: Math.max(c.label.length + 4, c.width || 20),
+              }));
+              const headerRow = ws.getRow(1);
+              headerRow.height = 24;
+              headerRow.eachCell(cell => { Object.assign(cell, hdrStyle(accentBg)); });
+              rows.forEach((rowData, ri) => {
+                const r = ws.addRow(colDefs.map(c => rowData[c.key] ?? ''));
+                r.height = 18;
+                const style = rowStyle(ri % 2 === 0, stripeBg);
+                r.eachCell({ includeEmpty: true }, cell => { Object.assign(cell, style); });
+              });
+              ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: colDefs.length } };
+            };
+
+            // Sheet 1: Ringkasan
+            const wsInfo = wb.addWorksheet('Ringkasan', { properties: { tabColor: { argb: C.indigo } } });
+            wsInfo.columns = [{ width: 30 }, { width: 45 }];
+
+            wsInfo.mergeCells('A1:B1');
+            const titleCell = wsInfo.getCell('A1');
+            titleCell.value = 'PetCare+ — Laporan Ekspor Data';
+            titleCell.font  = { bold: true, size: 15, name: 'Calibri', color: { argb: C.white } };
+            titleCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.indigo } };
+            titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+            wsInfo.getRow(1).height = 34;
+
+            wsInfo.addRow([]);
+
+            const addInfoRow = (label, value, bold, bgArgb) => {
+              const r = wsInfo.addRow([label, String(value ?? '')]);
+              r.height = 20;
+              r.getCell(1).font      = { bold: true, size: 10, name: 'Calibri', color: { argb: C.slate600 } };
+              r.getCell(2).font      = { bold: !!bold, size: 10, name: 'Calibri', color: { argb: C.slate800 } };
+              r.getCell(1).alignment = { vertical: 'middle' };
+              r.getCell(2).alignment = { vertical: 'middle' };
+              if (bgArgb) {
+                r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
+                r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
+              }
+            };
+
+            addInfoRow('Tanggal Export', exportDate, true, C.slate50);
+            addInfoRow('Rentang Data',   rangeLabel,  true, C.slate50);
+            wsInfo.addRow([]);
+
             if (data.profil_pengguna) {
-              infoData.push(['=== Profil Pengguna ===', '']);
-              infoData.push(['Field', 'Nilai']);
-              Object.entries(data.profil_pengguna).forEach(([k, v]) => infoData.push([k, String(v ?? '')]));
+              wsInfo.mergeCells('A' + wsInfo.rowCount + ':B' + wsInfo.rowCount);
+              const ph = wsInfo.addRow(['Profil Pengguna']);
+              ph.height = 22;
+              ph.getCell(1).font      = { bold: true, size: 11, name: 'Calibri', color: { argb: C.white } };
+              ph.getCell(1).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.purple } };
+              ph.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+              Object.entries(data.profil_pengguna).forEach(([k, v], i) => {
+                addInfoRow(k, v, false, i % 2 === 0 ? C.purpleLight : C.white);
+              });
             }
-            const wsInfo = XLSX.utils.aoa_to_sheet(infoData);
-            wsInfo['!cols'] = [{ wch: 28 }, { wch: 40 }];
-            // Style judul
-            if (wsInfo['A1']) wsInfo['A1'].s = { font: { bold: true, sz: 13, color: { rgb: '4F46E5' } } };
-            if (wsInfo['A5']) wsInfo['A5'].s = { font: { bold: true, sz: 11 } };
-            XLSX.utils.book_append_sheet(wb, wsInfo, 'Ringkasan');
 
             // Sheet 2: Daftar Hewan
-            if (data.daftar_hewan && data.daftar_hewan.length > 0) {
-              const ws = makeSheet(data.daftar_hewan, [
-                { label: 'Nama', key: 'nama' },
-                { label: 'Jenis', key: 'jenis' },
-                { label: 'Ras', key: 'ras' },
-                { label: 'Tanggal Lahir', key: 'tanggal_lahir' },
-                { label: 'Berat (kg)', key: 'berat_kg' },
-                { label: 'Catatan', key: 'catatan' },
-              ]);
-              if (ws) XLSX.utils.book_append_sheet(wb, ws, 'Daftar Hewan');
-            }
+            addTableSheet('Daftar Hewan', data.daftar_hewan, [
+              { label: 'Nama',          key: 'nama',          width: 20 },
+              { label: 'Jenis',         key: 'jenis',         width: 16 },
+              { label: 'Ras',           key: 'ras',           width: 20 },
+              { label: 'Tanggal Lahir', key: 'tanggal_lahir', width: 18 },
+              { label: 'Berat (kg)',    key: 'berat_kg',      width: 14 },
+              { label: 'Catatan',       key: 'catatan',       width: 30 },
+            ], C.green, C.greenLight);
 
             // Sheet 3: Jadwal Kegiatan
-            if (data.jadwal_kegiatan && data.jadwal_kegiatan.length > 0) {
-              const ws = makeSheet(data.jadwal_kegiatan, [
-                { label: 'Pet ID', key: 'pet_id' },
-                { label: 'Jenis Kegiatan', key: 'jenis_kegiatan' },
-                { label: 'Jadwal Waktu', key: 'jadwal_waktu' },
-                { label: 'Status', key: 'status' },
-                { label: 'Catatan', key: 'catatan' },
-              ]);
-              if (ws) XLSX.utils.book_append_sheet(wb, ws, 'Jadwal Kegiatan');
-            }
+            addTableSheet('Jadwal Kegiatan', data.jadwal_kegiatan, [
+              { label: 'Pet ID',         key: 'pet_id',         width: 14 },
+              { label: 'Jenis Kegiatan', key: 'jenis_kegiatan', width: 22 },
+              { label: 'Jadwal Waktu',   key: 'jadwal_waktu',   width: 22 },
+              { label: 'Status',         key: 'status',         width: 16 },
+              { label: 'Catatan',        key: 'catatan',        width: 30 },
+            ], C.indigo, C.indigoLight);
 
             // Sheet 4: Rekam Medis
-            if (data.rekam_medis && data.rekam_medis.length > 0) {
-              const ws = makeSheet(data.rekam_medis, [
-                { label: 'Pet ID', key: 'pet_id' },
-                { label: 'Jenis Rekaman', key: 'jenis_rekaman' },
-                { label: 'Tanggal', key: 'tanggal_rekaman' },
-                { label: 'Diagnosis', key: 'diagnosis' },
-                { label: 'Catatan', key: 'catatan' },
-              ]);
-              if (ws) XLSX.utils.book_append_sheet(wb, ws, 'Rekam Medis');
-            }
+            addTableSheet('Rekam Medis', data.rekam_medis, [
+              { label: 'Pet ID',    key: 'pet_id',          width: 14 },
+              { label: 'Jenis',     key: 'jenis_rekaman',   width: 20 },
+              { label: 'Tanggal',   key: 'tanggal_rekaman', width: 18 },
+              { label: 'Diagnosis', key: 'diagnosis',       width: 26 },
+              { label: 'Catatan',   key: 'catatan',         width: 30 },
+            ], C.orange, C.orangeLight);
 
-            XLSX.writeFile(wb, `petcare-data-${ts}${rangeSuffix}.xlsx`);
+            // Tulis file
+            const buffer = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `petcare-data-${ts}${rangeSuffix}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
             setDownloadDone(true);
-          }).catch(() => {
+          }).catch((err) => {
+            console.error(err);
             alert('Gagal memuat library Excel. Pastikan koneksi internet aktif.');
           });
+        }
         }
       } finally {
         setDownloading(false);
