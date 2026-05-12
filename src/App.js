@@ -2616,11 +2616,10 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
     return `"=== ${label} ===",\n${header}\n${body}\n\n`;
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     setDownloading(true);
     setDownloadDone(false);
-    setTimeout(() => {
-      try {
+    try {
         const data = buildExportData();
         const ts = new Date().toISOString().slice(0, 10);
         const rangeSuffix = downloadQuickRange !== 'all' ? `-${downloadQuickRange}` : '';
@@ -2643,7 +2642,8 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             script.onerror = reject;
             document.head.appendChild(script);
           });
-          loadJsPDF().then(jsPDF => {
+          const jsPDF = await loadJsPDF();
+          {
             const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
             const pageW = doc.internal.pageSize.getWidth();
             const margin = 14;
@@ -2768,12 +2768,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
 
             doc.save(`petcare-laporan-${ts}${rangeSuffix}.pdf`);
             setDownloadDone(true);
-            setDownloading(false);
-          }).catch(() => {
-            alert('Gagal memuat library PDF. Pastikan koneksi internet aktif.');
-            setDownloading(false);
-          });
-          return;
+          }
         } else {
           // Export XLSX dengan styling penuh menggunakan ExcelJS
           const loadExcelJS = () => new Promise((resolve, reject) => {
@@ -2785,7 +2780,8 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             document.head.appendChild(script);
           });
 
-          loadExcelJS().then(async (ExcelJS) => {
+          const ExcelJS = await loadExcelJS();
+          {
             const rangeLabel = getDateRange().label;
             const exportDate = new Date().toLocaleString('id-ID');
             const wb = new ExcelJS.Workbook();
@@ -2985,15 +2981,14 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             a.click();
             URL.revokeObjectURL(url);
             setDownloadDone(true);
-          }).catch((err) => {
-            console.error(err);
-            alert('Gagal memuat library Excel. Pastikan koneksi internet aktif.');
-          });
+          }
         }
-      } finally {
-        setDownloading(false);
-      }
-    }, 600);
+    } catch (err) {
+      console.error('Download error:', err);
+      alert('Terjadi kesalahan saat mengunduh data.');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const toggleDownloadSel = (key) => {
