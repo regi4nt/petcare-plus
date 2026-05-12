@@ -2733,24 +2733,54 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             }
             if (data.daftar_hewan && data.daftar_hewan.length > 0) {
               tableSection(data.daftar_hewan, [
-                { label: 'Nama', key: 'nama' }, { label: 'Jenis', key: 'jenis' },
-                { label: 'Ras', key: 'ras' }, { label: 'Tgl Lahir', key: 'tanggal_lahir' },
+                { label: 'Nama',       key: 'nama'     },
+                { label: 'Spesies',    key: 'spesies'  },
+                { label: 'Ras',        key: 'ras'       },
+                { label: 'Usia',       key: 'usia'      },
                 { label: 'Berat (kg)', key: 'berat_kg' },
+                { label: 'Gender',     key: 'gender'   },
+                { label: 'Warna',      key: 'warna'    },
               ], 'Daftar Hewan Peliharaan');
             }
             if (data.jadwal_kegiatan && data.jadwal_kegiatan.length > 0) {
               tableSection(data.jadwal_kegiatan, [
-                { label: 'Pet ID', key: 'pet_id' }, { label: 'Kegiatan', key: 'jenis_kegiatan' },
-                { label: 'Jadwal', key: 'jadwal_waktu' }, { label: 'Status', key: 'status' },
+                { label: 'Hewan',   key: 'hewan'   },
+                { label: 'Jenis',   key: 'jenis'   },
+                { label: 'Judul',   key: 'judul'   },
+                { label: 'Tanggal', key: 'tanggal' },
+                { label: 'Waktu',   key: 'waktu'   },
+                { label: 'Selesai', key: 'selesai' },
                 { label: 'Catatan', key: 'catatan' },
               ], 'Jadwal Kegiatan');
             }
             if (data.rekam_medis && data.rekam_medis.length > 0) {
               tableSection(data.rekam_medis, [
-                { label: 'Pet ID', key: 'pet_id' }, { label: 'Jenis', key: 'jenis_rekaman' },
-                { label: 'Tanggal', key: 'tanggal_rekaman' }, { label: 'Diagnosis', key: 'diagnosis' },
-                { label: 'Catatan', key: 'catatan' },
+                { label: 'Hewan',                key: 'hewan'               },
+                { label: 'Jenis',                key: 'jenis'               },
+                { label: 'Judul',                key: 'judul'               },
+                { label: 'Tanggal',              key: 'tanggal'             },
+                { label: 'Dokter',               key: 'dokter'              },
+                { label: 'Klinik',               key: 'klinik'              },
+                { label: 'Berat (kg)',            key: 'berat_kg'            },
+                { label: 'Suhu Tubuh',           key: 'suhu_tubuh'          },
+                { label: 'Catatan',              key: 'catatan'             },
+                { label: 'Kunjungan Berikutnya', key: 'kunjungan_berikutnya'},
               ], 'Rekam Medis');
+            }
+            if (data.monitoring_iot) {
+              sectionTitle('Monitoring IoT');
+              Object.entries(data.monitoring_iot).forEach(([k, v]) => labelValue(k, v));
+              y += 4;
+            }
+            if (data.riwayat_kesehatan_harian && data.riwayat_kesehatan_harian.length > 0) {
+              tableSection(data.riwayat_kesehatan_harian, [
+                { label: 'Tanggal',          key: 'tanggal'                  },
+                { label: 'Skor Kesehatan',   key: 'skor_kesehatan'           },
+                { label: 'Pembacaan',        key: 'jumlah_pembacaan'         },
+                { label: 'Suhu (°C)',         key: 'rata_suhu_c'              },
+                { label: 'Detak (BPM)',      key: 'rata_detak_jantung_bpm'   },
+                { label: 'SpO2 (%)',          key: 'rata_spo2_persen'         },
+              ], 'Riwayat Kesehatan Harian (IoT)');
             }
 
             const pageCount = doc.internal.getNumberOfPages();
@@ -2766,111 +2796,187 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             setDownloadDone(true);
           }
         } else {
-          // Export XLSX menggunakan SheetJS (browser-compatible)
+          // Export XLSX dengan styling menggunakan SheetJS + cell styling manual
           {
             const rangeLabel = getDateRange().label;
             const exportDate = new Date().toLocaleString('id-ID');
             const wb = XLSX.utils.book_new();
 
-            // Helper: buat sheet dari array of objects dengan header row
-            const addSheet = (sheetName, rows, colDefs) => {
-              if (!rows || rows.length === 0) return;
+            // ── Helper: buat cell style ──────────────────────────────
+            const styleHeader = { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: '4F46E5' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: { top: { style: 'thin', color: { rgb: '6366F1' } }, bottom: { style: 'medium', color: { rgb: '3730A3' } }, left: { style: 'thin', color: { rgb: '6366F1' } }, right: { style: 'thin', color: { rgb: '6366F1' } } } };
+            const styleRowEven = { font: { sz: 10, color: { rgb: '1E293B' } }, fill: { fgColor: { rgb: 'EDE9FE' } }, alignment: { vertical: 'center', wrapText: true }, border: { top: { style: 'hair', color: { rgb: 'E2E8F0' } }, bottom: { style: 'hair', color: { rgb: 'E2E8F0' } }, left: { style: 'thin', color: { rgb: 'E2E8F0' } }, right: { style: 'thin', color: { rgb: 'E2E8F0' } } } };
+            const styleRowOdd  = { font: { sz: 10, color: { rgb: '1E293B' } }, fill: { fgColor: { rgb: 'FFFFFF' } }, alignment: { vertical: 'center', wrapText: true }, border: { top: { style: 'hair', color: { rgb: 'E2E8F0' } }, bottom: { style: 'hair', color: { rgb: 'E2E8F0' } }, left: { style: 'thin', color: { rgb: 'E2E8F0' } }, right: { style: 'thin', color: { rgb: 'E2E8F0' } } } };
+            const styleTitleBig = { font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '4F46E5' } }, alignment: { horizontal: 'center', vertical: 'center' } };
+            const styleSectionHdr = { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '7C3AED' } }, alignment: { horizontal: 'left', vertical: 'center' } };
+            const styleLabel = { font: { bold: true, sz: 10, color: { rgb: '475569' } }, fill: { fgColor: { rgb: 'F8FAFC' } }, alignment: { vertical: 'center' } };
+            const styleValue = { font: { sz: 10, color: { rgb: '1E293B' } }, fill: { fgColor: { rgb: 'F8FAFC' } }, alignment: { vertical: 'center', wrapText: true } };
+
+            const applyStyle = (ws, cellRef, style) => {
+              if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+              ws[cellRef].s = style;
+            };
+
+            const applyRangeStyle = (ws, row, colCount, style) => {
+              for (let c = 0; c < colCount; c++) {
+                const ref = XLSX.utils.encode_cell({ r: row, c });
+                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+                ws[ref].s = style;
+              }
+            };
+
+            // ── Helper: buat sheet tabel dengan styling ──────────────
+            const addStyledSheet = (sheetName, rows, colDefs, headerColor, evenColor) => {
+              if (!rows || rows.length === 0) {
+                // Sheet kosong dengan pesan
+                const ws = XLSX.utils.aoa_to_sheet([['Tidak ada data']]);
+                XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                return;
+              }
               const headers = colDefs.map(c => c.label);
-              const dataRows = rows.map(row => colDefs.map(c => row[c.key] ?? ''));
-              const wsData = [headers, ...dataRows];
-              const ws = XLSX.utils.aoa_to_sheet(wsData);
-              // Set column widths
-              ws['!cols'] = colDefs.map(c => ({ wch: c.width || 20 }));
+              const dataRows = rows.map(row => colDefs.map(c => {
+                const val = row[c.key];
+                return val != null && val !== '' ? val : '-';
+              }));
+              const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+              ws['!cols'] = colDefs.map(c => ({ wch: c.width || 18 }));
+              ws['!rows'] = [{ hpt: 22 }, ...dataRows.map(() => ({ hpt: 18 }))];
+
+              const hStyle = { ...styleHeader, fill: { fgColor: { rgb: headerColor || '4F46E5' } } };
+              const eStyle = { ...styleRowEven, fill: { fgColor: { rgb: evenColor || 'EDE9FE' } } };
+
+              // Style header row
+              applyRangeStyle(ws, 0, colDefs.length, hStyle);
+              // Style data rows
+              dataRows.forEach((_, ri) => {
+                applyRangeStyle(ws, ri + 1, colDefs.length, ri % 2 === 0 ? eStyle : styleRowOdd);
+              });
+
+              // Freeze header row
+              ws['!freeze'] = { xSplit: 0, ySplit: 1 };
               XLSX.utils.book_append_sheet(wb, ws, sheetName);
             };
 
-            // Sheet 1: Ringkasan
-            const summaryRows = [
-              ['PetCare+ — Laporan Ekspor Data', ''],
-              ['', ''],
-              ['Tanggal Export', exportDate],
-              ['Rentang Data', rangeLabel],
-              ['', ''],
-            ];
+            // ── Sheet 1: Ringkasan ───────────────────────────────────
+            const summaryAoa = [];
+            summaryAoa.push(['PetCare+ — Laporan Ekspor Data', '']);
+            summaryAoa.push(['', '']);
+            summaryAoa.push(['Tanggal Export', exportDate]);
+            summaryAoa.push(['Rentang Data', rangeLabel]);
+            summaryAoa.push(['Jumlah Hewan', (data.daftar_hewan || []).length + ' ekor']);
+            summaryAoa.push(['Jumlah Jadwal', (data.jadwal_kegiatan || []).length + ' jadwal']);
+            summaryAoa.push(['Jumlah Rekam Medis', (data.rekam_medis || []).length + ' catatan']);
+            summaryAoa.push(['', '']);
             if (data.profil_pengguna) {
-              summaryRows.push(['— Profil Pengguna —', '']);
-              Object.entries(data.profil_pengguna).forEach(([k, v]) => {
-                summaryRows.push([k, String(v ?? '')]);
-              });
+              summaryAoa.push(['— PROFIL PENGGUNA —', '']);
+              summaryAoa.push(['Nama', data.profil_pengguna.nama || '-']);
+              summaryAoa.push(['Email', data.profil_pengguna.email || '-']);
+              summaryAoa.push(['Telepon', data.profil_pengguna.telepon || '-']);
+              summaryAoa.push(['Role', data.profil_pengguna.role || '-']);
             }
-            const wsRingkasan = XLSX.utils.aoa_to_sheet(summaryRows);
-            wsRingkasan['!cols'] = [{ wch: 30 }, { wch: 45 }];
-            XLSX.utils.book_append_sheet(wb, wsRingkasan, 'Ringkasan');
 
-            // Sheet 2: Daftar Hewan
-            addSheet('Daftar Hewan', data.daftar_hewan, [
+            const wsSum = XLSX.utils.aoa_to_sheet(summaryAoa);
+            wsSum['!cols'] = [{ wch: 28 }, { wch: 42 }];
+            wsSum['!rows'] = [{ hpt: 32 }, ...summaryAoa.slice(1).map(() => ({ hpt: 20 }))];
+            // Title row
+            wsSum['A1'].s = styleTitleBig;
+            wsSum['B1'].s = { ...styleTitleBig };
+            // Merge A1:B1 manually via !merges
+            wsSum['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+            // Style info rows
+            summaryAoa.forEach((row, ri) => {
+              if (ri === 0) return;
+              const isSection = String(row[0]).startsWith('—');
+              const aRef = XLSX.utils.encode_cell({ r: ri, c: 0 });
+              const bRef = XLSX.utils.encode_cell({ r: ri, c: 1 });
+              if (isSection) {
+                if (wsSum[aRef]) wsSum[aRef].s = styleSectionHdr;
+                if (wsSum[bRef]) wsSum[bRef].s = styleSectionHdr;
+              } else if (row[0] !== '') {
+                if (wsSum[aRef]) wsSum[aRef].s = styleLabel;
+                if (wsSum[bRef]) wsSum[bRef].s = styleValue;
+              }
+            });
+            XLSX.utils.book_append_sheet(wb, wsSum, 'Ringkasan');
+
+            // ── Sheet 2: Daftar Hewan ────────────────────────────────
+            addStyledSheet('Daftar Hewan', data.daftar_hewan, [
               { label: 'Nama',       key: 'nama',     width: 20 },
               { label: 'Spesies',    key: 'spesies',  width: 14 },
-              { label: 'Ras',        key: 'ras',      width: 20 },
+              { label: 'Ras',        key: 'ras',      width: 22 },
               { label: 'Usia',       key: 'usia',     width: 14 },
               { label: 'Berat (kg)', key: 'berat_kg', width: 13 },
               { label: 'Gender',     key: 'gender',   width: 12 },
               { label: 'Warna',      key: 'warna',    width: 14 },
-              { label: 'Catatan',    key: 'catatan',  width: 30 },
-            ]);
+              { label: 'Catatan',    key: 'catatan',  width: 32 },
+            ], '16A34A', 'DCFCE7');
 
-            // Sheet 3: Jadwal Kegiatan
-            addSheet('Jadwal Kegiatan', data.jadwal_kegiatan, [
-              { label: 'Hewan',   key: 'hewan',   width: 18 },
-              { label: 'Jenis',   key: 'jenis',   width: 18 },
-              { label: 'Judul',   key: 'judul',   width: 24 },
-              { label: 'Tanggal', key: 'tanggal', width: 14 },
-              { label: 'Waktu',   key: 'waktu',   width: 12 },
-              { label: 'Selesai', key: 'selesai', width: 12 },
-              { label: 'Catatan', key: 'catatan', width: 28 },
-            ]);
+            // ── Sheet 3: Jadwal Kegiatan ─────────────────────────────
+            addStyledSheet('Jadwal Kegiatan', data.jadwal_kegiatan, [
+              { label: 'Hewan',          key: 'hewan',   width: 18 },
+              { label: 'Jenis Kegiatan', key: 'jenis',   width: 20 },
+              { label: 'Judul',          key: 'judul',   width: 28 },
+              { label: 'Tanggal',        key: 'tanggal', width: 14 },
+              { label: 'Waktu',          key: 'waktu',   width: 10 },
+              { label: 'Selesai',        key: 'selesai', width: 10 },
+              { label: 'Catatan',        key: 'catatan', width: 30 },
+            ], '4F46E5', 'EDE9FE');
 
-            // Sheet 4: Rekam Medis
-            addSheet('Rekam Medis', data.rekam_medis, [
+            // ── Sheet 4: Rekam Medis ─────────────────────────────────
+            addStyledSheet('Rekam Medis', data.rekam_medis, [
               { label: 'Hewan',                key: 'hewan',                width: 18 },
               { label: 'Jenis',                key: 'jenis',                width: 18 },
-              { label: 'Judul',                key: 'judul',                width: 24 },
+              { label: 'Judul',                key: 'judul',                width: 26 },
               { label: 'Tanggal',              key: 'tanggal',              width: 14 },
               { label: 'Dokter',               key: 'dokter',               width: 20 },
               { label: 'Klinik',               key: 'klinik',               width: 22 },
               { label: 'Berat (kg)',           key: 'berat_kg',             width: 13 },
-              { label: 'Suhu Tubuh',           key: 'suhu_tubuh',           width: 14 },
-              { label: 'Catatan',              key: 'catatan',              width: 28 },
+              { label: 'Suhu Tubuh (°C)',      key: 'suhu_tubuh',           width: 16 },
+              { label: 'Catatan',              key: 'catatan',              width: 30 },
               { label: 'Kunjungan Berikutnya', key: 'kunjungan_berikutnya', width: 22 },
-            ]);
+            ], 'EA580C', 'FFF7ED');
 
-            // Sheet 5: Monitor IoT
+            // ── Sheet 5: Monitor IoT ─────────────────────────────────
             if (data.monitoring_iot) {
-              const iotRows = [
-                ['Monitor IoT - ' + data.monitoring_iot.hewan, ''],
+              const iotAoa = [
+                ['Monitor IoT — ' + (data.monitoring_iot.hewan || '-'), ''],
                 ['', ''],
-                ['Hewan Dipantau',                String(data.monitoring_iot.hewan ?? '-')],
-                ['Device ID',                     String(data.monitoring_iot.device_id ?? '-')],
-                ['Rata-rata Suhu (C)',             String(data.monitoring_iot.rata_suhu_c ?? '-')],
-                ['Rata-rata Detak Jantung (BPM)', String(data.monitoring_iot.rata_detak_jantung_bpm ?? '-')],
-                ['Rata-rata SpO2 (%)',             String(data.monitoring_iot.rata_spo2_persen ?? '-')],
-                ['Jumlah Pembacaan Sensor',        String(data.monitoring_iot.jumlah_pembacaan ?? '-')],
-                ['Pembacaan Terakhir',             String(data.monitoring_iot.pembacaan_terakhir ?? '-')],
+                ['Hewan Dipantau',                data.monitoring_iot.hewan || '-'],
+                ['Device ID',                     data.monitoring_iot.device_id || '-'],
+                ['Rata-rata Suhu (°C)',            data.monitoring_iot.rata_suhu_c || '-'],
+                ['Rata-rata Detak Jantung (BPM)', data.monitoring_iot.rata_detak_jantung_bpm || '-'],
+                ['Rata-rata SpO2 (%)',             data.monitoring_iot.rata_spo2_persen || '-'],
+                ['Jumlah Pembacaan Sensor',        String(data.monitoring_iot.jumlah_pembacaan || '-')],
+                ['Pembacaan Terakhir',             data.monitoring_iot.pembacaan_terakhir || '-'],
               ];
-              const wsIot = XLSX.utils.aoa_to_sheet(iotRows);
-              wsIot['!cols'] = [{ wch: 34 }, { wch: 28 }];
+              const wsIot = XLSX.utils.aoa_to_sheet(iotAoa);
+              wsIot['!cols'] = [{ wch: 34 }, { wch: 30 }];
+              wsIot['!rows'] = [{ hpt: 28 }, ...iotAoa.slice(1).map(() => ({ hpt: 20 }))];
+              wsIot['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
+              if (wsIot['A1']) wsIot['A1'].s = { ...styleTitleBig, fill: { fgColor: { rgb: '7C3AED' } } };
+              iotAoa.forEach((row, ri) => {
+                if (ri <= 1) return;
+                const aRef = XLSX.utils.encode_cell({ r: ri, c: 0 });
+                const bRef = XLSX.utils.encode_cell({ r: ri, c: 1 });
+                if (wsIot[aRef]) wsIot[aRef].s = styleLabel;
+                if (wsIot[bRef]) wsIot[bRef].s = styleValue;
+              });
               XLSX.utils.book_append_sheet(wb, wsIot, 'Monitor IoT');
             }
 
-            // Sheet 6: Riwayat Kesehatan Harian
+            // ── Sheet 6: Riwayat Kesehatan ───────────────────────────
             if (data.riwayat_kesehatan_harian && data.riwayat_kesehatan_harian.length > 0) {
-              addSheet('Riwayat Kesehatan', data.riwayat_kesehatan_harian, [
+              addStyledSheet('Riwayat Kesehatan', data.riwayat_kesehatan_harian, [
                 { label: 'Tanggal',          key: 'tanggal',                width: 14 },
                 { label: 'Skor Kesehatan',   key: 'skor_kesehatan',         width: 16 },
                 { label: 'Jml Pembacaan',    key: 'jumlah_pembacaan',       width: 16 },
-                { label: 'Rata Suhu (C)',    key: 'rata_suhu_c',            width: 16 },
+                { label: 'Rata Suhu (°C)',   key: 'rata_suhu_c',            width: 16 },
                 { label: 'Rata HR (BPM)',    key: 'rata_detak_jantung_bpm', width: 16 },
                 { label: 'Rata SpO2 (%)',    key: 'rata_spo2_persen',       width: 16 },
-              ]);
+              ], '7C3AED', 'F5F3FF');
             }
 
-            // Tulis file
-            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            // ── Tulis file ───────────────────────────────────────────
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
             const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
