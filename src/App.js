@@ -2573,19 +2573,22 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
     }
 
     // ── Data IoT / Monitoring — rata-rata & riwayat harian dari sensor ESP32 ──
-    if (iotCalc) {
+    // Safe check: iotCalc & dailyHealth mungkin tidak tersedia di SettingsPage
+    const safeIotCalc = (typeof iotCalc !== 'undefined') ? iotCalc : null;
+    const safeDailyHealth = (typeof dailyHealth !== 'undefined') ? dailyHealth : null;
+    if (safeIotCalc) {
       data.monitoring_iot = {
-        hewan: selectedPet?.name || '-',
-        device_id: selectedPet?.device_id || '-',
-        rata_suhu_c: iotCalc.avg_suhu != null ? parseFloat(iotCalc.avg_suhu).toFixed(1) : '-',
-        rata_detak_jantung_bpm: iotCalc.avg_heart_rate != null ? parseFloat(iotCalc.avg_heart_rate).toFixed(0) : '-',
-        rata_spo2_persen: iotCalc.avg_spo2 != null ? parseFloat(iotCalc.avg_spo2).toFixed(1) : '-',
-        jumlah_pembacaan: iotCalc.reading_count || '-',
-        pembacaan_terakhir: iotCalc.last_reading_at ? new Date(iotCalc.last_reading_at).toLocaleString('id-ID') : '-',
+        hewan: (typeof selectedPet !== 'undefined') ? (selectedPet?.name || '-') : '-',
+        device_id: (typeof selectedPet !== 'undefined') ? (selectedPet?.device_id || '-') : '-',
+        rata_suhu_c: safeIotCalc.avg_suhu != null ? parseFloat(safeIotCalc.avg_suhu).toFixed(1) : '-',
+        rata_detak_jantung_bpm: safeIotCalc.avg_heart_rate != null ? parseFloat(safeIotCalc.avg_heart_rate).toFixed(0) : '-',
+        rata_spo2_persen: safeIotCalc.avg_spo2 != null ? parseFloat(safeIotCalc.avg_spo2).toFixed(1) : '-',
+        jumlah_pembacaan: safeIotCalc.reading_count || '-',
+        pembacaan_terakhir: safeIotCalc.last_reading_at ? new Date(safeIotCalc.last_reading_at).toLocaleString('id-ID') : '-',
       };
     }
-    if (dailyHealth && dailyHealth.length > 0) {
-      data.riwayat_kesehatan_harian = dailyHealth.map(d => ({
+    if (safeDailyHealth && safeDailyHealth.length > 0) {
+      data.riwayat_kesehatan_harian = safeDailyHealth.map(d => ({
         tanggal: d.date || '-',
         skor_kesehatan: d.score != null ? d.score : '-',
         jumlah_pembacaan: d.reading_count || 0,
