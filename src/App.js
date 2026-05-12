@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import jsPDF from 'jspdf';
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import { createPortal } from 'react-dom';
 import {
   HeartPulse, LayoutDashboard, Calendar, Activity, Settings, Bell,
@@ -2763,117 +2763,44 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             setDownloadDone(true);
           }
         } else {
-          // Export XLSX dengan styling penuh menggunakan ExcelJS
+          // Export XLSX menggunakan SheetJS (browser-compatible)
           {
             const rangeLabel = getDateRange().label;
             const exportDate = new Date().toLocaleString('id-ID');
-            const wb = new ExcelJS.Workbook();
-            wb.creator = 'PetCare+';
-            wb.created = new Date();
+            const wb = XLSX.utils.book_new();
 
-            // warna tema
-            const C = {
-              indigo:      'FF4F46E5', indigoLight: 'FFEDE9FE', indigoDark: 'FF3730A3',
-              white:       'FFFFFFFF', slate50:     'FFF8FAFC', slate100:   'FFF1F5F9',
-              slate200:    'FFE2E8F0', slate600:    'FF475569', slate800:   'FF1E293B',
-              green:       'FF16A34A', greenLight:  'FFdcfce7',
-              purple:      'FF7C3AED', purpleLight: 'FFF5F3FF',
-              orange:      'FFEA580C', orangeLight: 'FFFFF7ED',
-            };
-
-            const hdrStyle = (bgArgb) => ({
-              font:      { bold: true, color: { argb: C.white }, size: 10, name: 'Calibri' },
-              fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } },
-              alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
-              border: {
-                top:    { style: 'thin',   color: { argb: 'FF6366F1' } },
-                bottom: { style: 'medium', color: { argb: C.indigoDark } },
-                left:   { style: 'thin',   color: { argb: 'FF6366F1' } },
-                right:  { style: 'thin',   color: { argb: 'FF6366F1' } },
-              },
-            });
-
-            const rowStyle = (even, stripeBg) => ({
-              font:      { size: 9.5, name: 'Calibri', color: { argb: C.slate800 } },
-              fill:      even
-                ? { type: 'pattern', pattern: 'solid', fgColor: { argb: stripeBg } }
-                : { type: 'pattern', pattern: 'solid', fgColor: { argb: C.white } },
-              alignment: { vertical: 'middle', wrapText: true },
-              border: {
-                top:    { style: 'hair', color: { argb: C.slate200 } },
-                bottom: { style: 'hair', color: { argb: C.slate200 } },
-                left:   { style: 'thin', color: { argb: C.slate200 } },
-                right:  { style: 'thin', color: { argb: C.slate200 } },
-              },
-            });
-
-            const addTableSheet = (sheetName, rows, colDefs, accentBg, stripeBg) => {
+            // Helper: buat sheet dari array of objects dengan header row
+            const addSheet = (sheetName, rows, colDefs) => {
               if (!rows || rows.length === 0) return;
-              const ws = wb.addWorksheet(sheetName, {
-                views: [{ state: 'frozen', ySplit: 1 }],
-                properties: { tabColor: { argb: accentBg } },
-              });
-              ws.columns = colDefs.map(c => ({
-                header: c.label, key: c.key,
-                width: Math.max(c.label.length + 4, c.width || 20),
-              }));
-              const headerRow = ws.getRow(1);
-              headerRow.height = 24;
-              headerRow.eachCell(cell => { Object.assign(cell, hdrStyle(accentBg)); });
-              rows.forEach((rowData, ri) => {
-                const r = ws.addRow(colDefs.map(c => rowData[c.key] ?? ''));
-                r.height = 18;
-                const style = rowStyle(ri % 2 === 0, stripeBg);
-                r.eachCell({ includeEmpty: true }, cell => { Object.assign(cell, style); });
-              });
-              ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: colDefs.length } };
+              const headers = colDefs.map(c => c.label);
+              const dataRows = rows.map(row => colDefs.map(c => row[c.key] ?? ''));
+              const wsData = [headers, ...dataRows];
+              const ws = XLSX.utils.aoa_to_sheet(wsData);
+              // Set column widths
+              ws['!cols'] = colDefs.map(c => ({ wch: c.width || 20 }));
+              XLSX.utils.book_append_sheet(wb, ws, sheetName);
             };
 
             // Sheet 1: Ringkasan
-            const wsInfo = wb.addWorksheet('Ringkasan', { properties: { tabColor: { argb: C.indigo } } });
-            wsInfo.columns = [{ width: 30 }, { width: 45 }];
-
-            wsInfo.mergeCells('A1:B1');
-            const titleCell = wsInfo.getCell('A1');
-            titleCell.value = 'PetCare+ — Laporan Ekspor Data';
-            titleCell.font  = { bold: true, size: 15, name: 'Calibri', color: { argb: C.white } };
-            titleCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.indigo } };
-            titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-            wsInfo.getRow(1).height = 34;
-
-            wsInfo.addRow([]);
-
-            const addInfoRow = (label, value, bold, bgArgb) => {
-              const r = wsInfo.addRow([label, String(value ?? '')]);
-              r.height = 20;
-              r.getCell(1).font      = { bold: true, size: 10, name: 'Calibri', color: { argb: C.slate600 } };
-              r.getCell(2).font      = { bold: !!bold, size: 10, name: 'Calibri', color: { argb: C.slate800 } };
-              r.getCell(1).alignment = { vertical: 'middle' };
-              r.getCell(2).alignment = { vertical: 'middle' };
-              if (bgArgb) {
-                r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
-                r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } };
-              }
-            };
-
-            addInfoRow('Tanggal Export', exportDate, true, C.slate50);
-            addInfoRow('Rentang Data',   rangeLabel,  true, C.slate50);
-            wsInfo.addRow([]);
-
+            const summaryRows = [
+              ['PetCare+ — Laporan Ekspor Data', ''],
+              ['', ''],
+              ['Tanggal Export', exportDate],
+              ['Rentang Data', rangeLabel],
+              ['', ''],
+            ];
             if (data.profil_pengguna) {
-              const ph = wsInfo.addRow(['Profil Pengguna']);
-              wsInfo.mergeCells(`A${ph.number}:B${ph.number}`);
-              ph.height = 22;
-              ph.getCell(1).font      = { bold: true, size: 11, name: 'Calibri', color: { argb: C.white } };
-              ph.getCell(1).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.purple } };
-              ph.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
-              Object.entries(data.profil_pengguna).forEach(([k, v], i) => {
-                addInfoRow(k, v, false, i % 2 === 0 ? C.purpleLight : C.white);
+              summaryRows.push(['— Profil Pengguna —', '']);
+              Object.entries(data.profil_pengguna).forEach(([k, v]) => {
+                summaryRows.push([k, String(v ?? '')]);
               });
             }
+            const wsRingkasan = XLSX.utils.aoa_to_sheet(summaryRows);
+            wsRingkasan['!cols'] = [{ wch: 30 }, { wch: 45 }];
+            XLSX.utils.book_append_sheet(wb, wsRingkasan, 'Ringkasan');
 
             // Sheet 2: Daftar Hewan
-            addTableSheet('Daftar Hewan', data.daftar_hewan, [
+            addSheet('Daftar Hewan', data.daftar_hewan, [
               { label: 'Nama',       key: 'nama',     width: 20 },
               { label: 'Spesies',    key: 'spesies',  width: 14 },
               { label: 'Ras',        key: 'ras',      width: 20 },
@@ -2882,10 +2809,10 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
               { label: 'Gender',     key: 'gender',   width: 12 },
               { label: 'Warna',      key: 'warna',    width: 14 },
               { label: 'Catatan',    key: 'catatan',  width: 30 },
-            ], C.green, C.greenLight);
+            ]);
 
             // Sheet 3: Jadwal Kegiatan
-            addTableSheet('Jadwal Kegiatan', data.jadwal_kegiatan, [
+            addSheet('Jadwal Kegiatan', data.jadwal_kegiatan, [
               { label: 'Hewan',   key: 'hewan',   width: 18 },
               { label: 'Jenis',   key: 'jenis',   width: 18 },
               { label: 'Judul',   key: 'judul',   width: 24 },
@@ -2893,10 +2820,10 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
               { label: 'Waktu',   key: 'waktu',   width: 12 },
               { label: 'Selesai', key: 'selesai', width: 12 },
               { label: 'Catatan', key: 'catatan', width: 28 },
-            ], C.indigo, C.indigoLight);
+            ]);
 
             // Sheet 4: Rekam Medis
-            addTableSheet('Rekam Medis', data.rekam_medis, [
+            addSheet('Rekam Medis', data.rekam_medis, [
               { label: 'Hewan',                key: 'hewan',                width: 18 },
               { label: 'Jenis',                key: 'jenis',                width: 18 },
               { label: 'Judul',                key: 'judul',                width: 24 },
@@ -2907,56 +2834,41 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
               { label: 'Suhu Tubuh',           key: 'suhu_tubuh',           width: 14 },
               { label: 'Catatan',              key: 'catatan',              width: 28 },
               { label: 'Kunjungan Berikutnya', key: 'kunjungan_berikutnya', width: 22 },
-            ], C.orange, C.orangeLight);
+            ]);
 
             // Sheet 5: Monitor IoT
             if (data.monitoring_iot) {
-              const wsIot = wb.addWorksheet('Monitor IoT', { properties: { tabColor: { argb: C.purple } } });
-              wsIot.columns = [{ width: 34 }, { width: 28 }];
-              wsIot.mergeCells('A1:B1');
-              const iotTitle = wsIot.getCell('A1');
-              iotTitle.value = 'Monitor IoT - ' + data.monitoring_iot.hewan;
-              iotTitle.font  = { bold: true, size: 13, name: 'Calibri', color: { argb: C.white } };
-              iotTitle.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.purple } };
-              iotTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-              wsIot.getRow(1).height = 28;
-              const iotFields = [
-                ['Hewan Dipantau',                data.monitoring_iot.hewan],
-                ['Device ID',                     data.monitoring_iot.device_id],
-                ['Rata-rata Suhu (C)',             data.monitoring_iot.rata_suhu_c],
-                ['Rata-rata Detak Jantung (BPM)', data.monitoring_iot.rata_detak_jantung_bpm],
-                ['Rata-rata SpO2 (%)',             data.monitoring_iot.rata_spo2_persen],
-                ['Jumlah Pembacaan Sensor',        data.monitoring_iot.jumlah_pembacaan],
-                ['Pembacaan Terakhir',             data.monitoring_iot.pembacaan_terakhir],
+              const iotRows = [
+                ['Monitor IoT - ' + data.monitoring_iot.hewan, ''],
+                ['', ''],
+                ['Hewan Dipantau',                String(data.monitoring_iot.hewan ?? '-')],
+                ['Device ID',                     String(data.monitoring_iot.device_id ?? '-')],
+                ['Rata-rata Suhu (C)',             String(data.monitoring_iot.rata_suhu_c ?? '-')],
+                ['Rata-rata Detak Jantung (BPM)', String(data.monitoring_iot.rata_detak_jantung_bpm ?? '-')],
+                ['Rata-rata SpO2 (%)',             String(data.monitoring_iot.rata_spo2_persen ?? '-')],
+                ['Jumlah Pembacaan Sensor',        String(data.monitoring_iot.jumlah_pembacaan ?? '-')],
+                ['Pembacaan Terakhir',             String(data.monitoring_iot.pembacaan_terakhir ?? '-')],
               ];
-              iotFields.forEach(function(pair, i) {
-                var r = wsIot.addRow([pair[0], String(pair[1] != null ? pair[1] : '-')]);
-                r.height = 20;
-                r.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: C.slate600 } };
-                r.getCell(2).font = { size: 10, name: 'Calibri', color: { argb: C.slate800 } };
-                r.getCell(1).alignment = { vertical: 'middle' };
-                r.getCell(2).alignment = { vertical: 'middle' };
-                var bg = i % 2 === 0 ? C.purpleLight : C.white;
-                r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-                r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-              });
+              const wsIot = XLSX.utils.aoa_to_sheet(iotRows);
+              wsIot['!cols'] = [{ wch: 34 }, { wch: 28 }];
+              XLSX.utils.book_append_sheet(wb, wsIot, 'Monitor IoT');
             }
 
             // Sheet 6: Riwayat Kesehatan Harian
             if (data.riwayat_kesehatan_harian && data.riwayat_kesehatan_harian.length > 0) {
-              addTableSheet('Riwayat Kesehatan', data.riwayat_kesehatan_harian, [
+              addSheet('Riwayat Kesehatan', data.riwayat_kesehatan_harian, [
                 { label: 'Tanggal',          key: 'tanggal',                width: 14 },
                 { label: 'Skor Kesehatan',   key: 'skor_kesehatan',         width: 16 },
                 { label: 'Jml Pembacaan',    key: 'jumlah_pembacaan',       width: 16 },
                 { label: 'Rata Suhu (C)',    key: 'rata_suhu_c',            width: 16 },
                 { label: 'Rata HR (BPM)',    key: 'rata_detak_jantung_bpm', width: 16 },
                 { label: 'Rata SpO2 (%)',    key: 'rata_spo2_persen',       width: 16 },
-              ], C.purple, C.purpleLight);
+              ]);
             }
 
             // Tulis file
-            const buffer = await wb.xlsx.writeBuffer();
-            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
