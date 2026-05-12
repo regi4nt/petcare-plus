@@ -2507,6 +2507,8 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
   const buildExportData = () => {
     const data = {};
     const { label: rangeLabel } = getDateRange();
+
+    // ── Profil Pengguna ────────────────────────────────────────────
     if (downloadSelection.profile) {
       data.profil_pengguna = {
         nama: profile?.name || '-',
@@ -2517,55 +2519,81 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
         tanggal_ekspor: new Date().toLocaleString('id-ID'),
       };
     }
+
+    // ── Daftar Hewan — sesuai kolom DB: name, species, breed, age, weight, gender, color, notes ──
     if (downloadSelection.pets) {
       data.daftar_hewan = (pets || []).map(p => ({
-        id: p.id,
-        nama: p.name,
-        spesies: p.species,
+        nama: p.name || '-',
+        spesies: p.species || '-',
         ras: p.breed || '-',
-        usia: p.age != null ? `${p.age} ${p.age_unit || 'tahun'}` : '-',
+        usia: p.age != null && p.age !== '' ? `${p.age} ${Number(String(p.age).replace(',','.')) < 1 ? 'minggu' : 'tahun'}` : '-',
         berat_kg: p.weight || '-',
         gender: p.gender || '-',
-        device_id: p.device_id || '-',
+        warna: p.color || '-',
         catatan: p.notes || '-',
       }));
     }
+
+    // ── Jadwal Kegiatan — sesuai kolom DB: type, title, date, time, notes, done ──
     if (downloadSelection.schedules) {
       const filtered = filterByDate(schedules, 'date');
       data.jadwal_kegiatan = filtered.map(s => {
         const petName = (pets || []).find(p => p.id === s.pet_id)?.name || '-';
         return {
-          id: s.id,
           hewan: petName,
-          judul: s.title,
-          jenis: s.type,
-          tanggal: s.date,
-          waktu: s.time,
-          pengulangan: s.repeat || 'none',
+          jenis: s.type || '-',
+          judul: s.title || '-',
+          tanggal: s.date || '-',
+          waktu: s.time || '-',
           selesai: s.done ? 'Ya' : 'Tidak',
           catatan: s.notes || '-',
         };
       });
     }
+
+    // ── Rekam Medis — sesuai kolom DB: date, type, title, doctor, clinic, weight, temp, notes, next_visit ──
     if (downloadSelection.records) {
       const filtered = filterByDate(records, 'date');
       data.rekam_medis = filtered.map(r => {
         const petName = (pets || []).find(p => p.id === r.pet_id)?.name || '-';
         return {
-          id: r.id,
           hewan: petName,
-          judul: r.title,
-          jenis: r.type,
-          tanggal: r.date,
-          berat_saat_itu_kg: r.weight || '-',
-          deskripsi: r.description || '-',
-          dokter: r.vet_name || '-',
+          jenis: r.type || '-',
+          judul: r.title || '-',
+          tanggal: r.date || '-',
+          dokter: r.doctor || '-',
           klinik: r.clinic || '-',
+          berat_kg: r.weight || '-',
+          suhu_tubuh: r.temp || '-',
+          catatan: r.notes || '-',
           kunjungan_berikutnya: r.next_visit || '-',
-          obat: r.medication || '-',
         };
       });
     }
+
+    // ── Data IoT / Monitoring — rata-rata & riwayat harian dari sensor ESP32 ──
+    if (iotCalc) {
+      data.monitoring_iot = {
+        hewan: selectedPet?.name || '-',
+        device_id: selectedPet?.device_id || '-',
+        rata_suhu_c: iotCalc.avg_suhu != null ? parseFloat(iotCalc.avg_suhu).toFixed(1) : '-',
+        rata_detak_jantung_bpm: iotCalc.avg_heart_rate != null ? parseFloat(iotCalc.avg_heart_rate).toFixed(0) : '-',
+        rata_spo2_persen: iotCalc.avg_spo2 != null ? parseFloat(iotCalc.avg_spo2).toFixed(1) : '-',
+        jumlah_pembacaan: iotCalc.reading_count || '-',
+        pembacaan_terakhir: iotCalc.last_reading_at ? new Date(iotCalc.last_reading_at).toLocaleString('id-ID') : '-',
+      };
+    }
+    if (dailyHealth && dailyHealth.length > 0) {
+      data.riwayat_kesehatan_harian = dailyHealth.map(d => ({
+        tanggal: d.date || '-',
+        skor_kesehatan: d.score != null ? d.score : '-',
+        jumlah_pembacaan: d.reading_count || 0,
+        rata_suhu_c: d.avg_suhu != null ? parseFloat(d.avg_suhu).toFixed(1) : '-',
+        rata_detak_jantung_bpm: d.avg_hr != null ? parseFloat(d.avg_hr).toFixed(0) : '-',
+        rata_spo2_persen: d.avg_spo2 != null ? parseFloat(d.avg_spo2).toFixed(1) : '-',
+      }));
+    }
+
     return data;
   };
 
@@ -2867,31 +2895,85 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
 
             // Sheet 2: Daftar Hewan
             addTableSheet('Daftar Hewan', data.daftar_hewan, [
-              { label: 'Nama',          key: 'nama',          width: 20 },
-              { label: 'Jenis',         key: 'jenis',         width: 16 },
-              { label: 'Ras',           key: 'ras',           width: 20 },
-              { label: 'Tanggal Lahir', key: 'tanggal_lahir', width: 18 },
-              { label: 'Berat (kg)',    key: 'berat_kg',      width: 14 },
-              { label: 'Catatan',       key: 'catatan',       width: 30 },
+              { label: 'Nama',       key: 'nama',     width: 20 },
+              { label: 'Spesies',    key: 'spesies',  width: 14 },
+              { label: 'Ras',        key: 'ras',      width: 20 },
+              { label: 'Usia',       key: 'usia',     width: 14 },
+              { label: 'Berat (kg)', key: 'berat_kg', width: 13 },
+              { label: 'Gender',     key: 'gender',   width: 12 },
+              { label: 'Warna',      key: 'warna',    width: 14 },
+              { label: 'Catatan',    key: 'catatan',  width: 30 },
             ], C.green, C.greenLight);
 
             // Sheet 3: Jadwal Kegiatan
             addTableSheet('Jadwal Kegiatan', data.jadwal_kegiatan, [
-              { label: 'Pet ID',         key: 'pet_id',         width: 14 },
-              { label: 'Jenis Kegiatan', key: 'jenis_kegiatan', width: 22 },
-              { label: 'Jadwal Waktu',   key: 'jadwal_waktu',   width: 22 },
-              { label: 'Status',         key: 'status',         width: 16 },
-              { label: 'Catatan',        key: 'catatan',        width: 30 },
+              { label: 'Hewan',   key: 'hewan',   width: 18 },
+              { label: 'Jenis',   key: 'jenis',   width: 18 },
+              { label: 'Judul',   key: 'judul',   width: 24 },
+              { label: 'Tanggal', key: 'tanggal', width: 14 },
+              { label: 'Waktu',   key: 'waktu',   width: 12 },
+              { label: 'Selesai', key: 'selesai', width: 12 },
+              { label: 'Catatan', key: 'catatan', width: 28 },
             ], C.indigo, C.indigoLight);
 
             // Sheet 4: Rekam Medis
             addTableSheet('Rekam Medis', data.rekam_medis, [
-              { label: 'Pet ID',    key: 'pet_id',          width: 14 },
-              { label: 'Jenis',     key: 'jenis_rekaman',   width: 20 },
-              { label: 'Tanggal',   key: 'tanggal_rekaman', width: 18 },
-              { label: 'Diagnosis', key: 'diagnosis',       width: 26 },
-              { label: 'Catatan',   key: 'catatan',         width: 30 },
+              { label: 'Hewan',                key: 'hewan',                width: 18 },
+              { label: 'Jenis',                key: 'jenis',                width: 18 },
+              { label: 'Judul',                key: 'judul',                width: 24 },
+              { label: 'Tanggal',              key: 'tanggal',              width: 14 },
+              { label: 'Dokter',               key: 'dokter',               width: 20 },
+              { label: 'Klinik',               key: 'klinik',               width: 22 },
+              { label: 'Berat (kg)',           key: 'berat_kg',             width: 13 },
+              { label: 'Suhu Tubuh',           key: 'suhu_tubuh',           width: 14 },
+              { label: 'Catatan',              key: 'catatan',              width: 28 },
+              { label: 'Kunjungan Berikutnya', key: 'kunjungan_berikutnya', width: 22 },
             ], C.orange, C.orangeLight);
+
+            // Sheet 5: Monitor IoT
+            if (data.monitoring_iot) {
+              const wsIot = wb.addWorksheet('Monitor IoT', { properties: { tabColor: { argb: C.purple } } });
+              wsIot.columns = [{ width: 34 }, { width: 28 }];
+              wsIot.mergeCells('A1:B1');
+              const iotTitle = wsIot.getCell('A1');
+              iotTitle.value = 'Monitor IoT - ' + data.monitoring_iot.hewan;
+              iotTitle.font  = { bold: true, size: 13, name: 'Calibri', color: { argb: C.white } };
+              iotTitle.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.purple } };
+              iotTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+              wsIot.getRow(1).height = 28;
+              const iotFields = [
+                ['Hewan Dipantau',                data.monitoring_iot.hewan],
+                ['Device ID',                     data.monitoring_iot.device_id],
+                ['Rata-rata Suhu (C)',             data.monitoring_iot.rata_suhu_c],
+                ['Rata-rata Detak Jantung (BPM)', data.monitoring_iot.rata_detak_jantung_bpm],
+                ['Rata-rata SpO2 (%)',             data.monitoring_iot.rata_spo2_persen],
+                ['Jumlah Pembacaan Sensor',        data.monitoring_iot.jumlah_pembacaan],
+                ['Pembacaan Terakhir',             data.monitoring_iot.pembacaan_terakhir],
+              ];
+              iotFields.forEach(function(pair, i) {
+                var r = wsIot.addRow([pair[0], String(pair[1] != null ? pair[1] : '-')]);
+                r.height = 20;
+                r.getCell(1).font = { bold: true, size: 10, name: 'Calibri', color: { argb: C.slate600 } };
+                r.getCell(2).font = { size: 10, name: 'Calibri', color: { argb: C.slate800 } };
+                r.getCell(1).alignment = { vertical: 'middle' };
+                r.getCell(2).alignment = { vertical: 'middle' };
+                var bg = i % 2 === 0 ? C.purpleLight : C.white;
+                r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+                r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+              });
+            }
+
+            // Sheet 6: Riwayat Kesehatan Harian
+            if (data.riwayat_kesehatan_harian && data.riwayat_kesehatan_harian.length > 0) {
+              addTableSheet('Riwayat Kesehatan', data.riwayat_kesehatan_harian, [
+                { label: 'Tanggal',          key: 'tanggal',                width: 14 },
+                { label: 'Skor Kesehatan',   key: 'skor_kesehatan',         width: 16 },
+                { label: 'Jml Pembacaan',    key: 'jumlah_pembacaan',       width: 16 },
+                { label: 'Rata Suhu (C)',    key: 'rata_suhu_c',            width: 16 },
+                { label: 'Rata HR (BPM)',    key: 'rata_detak_jantung_bpm', width: 16 },
+                { label: 'Rata SpO2 (%)',    key: 'rata_spo2_persen',       width: 16 },
+              ], C.purple, C.purpleLight);
+            }
 
             // Tulis file
             const buffer = await wb.xlsx.writeBuffer();
