@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import jsPDF from 'jspdf';
-import ExcelJS from 'exceljs';
+// jsPDF loaded dynamically via CDN in handleDownload
 import { createPortal } from 'react-dom';
 import {
   HeartPulse, LayoutDashboard, Calendar, Activity, Settings, Bell,
@@ -2630,12 +2629,20 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
           const a = document.createElement('a');
           a.href = url;
           a.download = `petcare-data-${ts}${rangeSuffix}.json`;
-          document.body.appendChild(a);
           a.click();
-          document.body.removeChild(a);
           URL.revokeObjectURL(url);
           setDownloadDone(true);
         } else if (downloadFormat === 'pdf') {
+          // Load jsPDF from CDN dynamically
+          const loadJsPDF = () => new Promise((resolve, reject) => {
+            if (window.jspdf) { resolve(window.jspdf.jsPDF); return; }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            script.onload = () => resolve(window.jspdf.jsPDF);
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+          const jsPDF = await loadJsPDF();
           {
             const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
             const pageW = doc.internal.pageSize.getWidth();
@@ -2764,6 +2771,16 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
           }
         } else {
           // Export XLSX dengan styling penuh menggunakan ExcelJS
+          const loadExcelJS = () => new Promise((resolve, reject) => {
+            if (window.ExcelJS) { resolve(window.ExcelJS); return; }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+            script.onload = () => resolve(window.ExcelJS);
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+
+          const ExcelJS = await loadExcelJS();
           {
             const rangeLabel = getDateRange().label;
             const exportDate = new Date().toLocaleString('id-ID');
@@ -2861,8 +2878,8 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             wsInfo.addRow([]);
 
             if (data.profil_pengguna) {
+              wsInfo.mergeCells('A' + wsInfo.rowCount + ':B' + wsInfo.rowCount);
               const ph = wsInfo.addRow(['Profil Pengguna']);
-              wsInfo.mergeCells(`A${ph.number}:B${ph.number}`);
               ph.height = 22;
               ph.getCell(1).font      = { bold: true, size: 11, name: 'Calibri', color: { argb: C.white } };
               ph.getCell(1).fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: C.purple } };
@@ -2961,9 +2978,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             const a = document.createElement('a');
             a.href = url;
             a.download = `petcare-data-${ts}${rangeSuffix}.xlsx`;
-            document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
             URL.revokeObjectURL(url);
             setDownloadDone(true);
           }
