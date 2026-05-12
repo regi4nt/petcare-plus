@@ -360,3 +360,25 @@ body {
 
 /* ── Health score ring colors ── */
 [data-dark="true"] .ring-slate-200 { --tw-ring-color: #263347 !important; }
+
+/* ── Auto Theme Transition ──────────────────────────────────────────── */
+/* Smooth color transition when dark/light mode switches */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 400ms;
+  transition-timing-function: ease;
+}
+/* Exclude elements that shouldn't animate color */
+button, a, input, select, textarea {
+  transition-property: background-color, border-color, color, box-shadow, transform, opacity;
+  transition-duration: 200ms;
+}
+
+/* ── Theme time indicator badge ─────────────────────────────────────── */
+.theme-auto-dot {
+  animation: theme-pulse 2s ease-in-out infinite;
+}
+@keyframes theme-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}

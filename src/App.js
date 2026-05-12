@@ -2431,7 +2431,7 @@ const TipsPage = ({ selectedPet, records }) => {
 };
 
 // ─── SETTINGS PAGE ────────────────────────────────────────────────────
-const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet, darkMode, onToggleDark, notifSettings, onSaveNotifSettings, pwaInstall, schedules, records }) => {
+const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdatePet, onDeletePet, darkMode, onToggleDark, themeMode, onResetAutoTheme, notifSettings, onSaveNotifSettings, pwaInstall, schedules, records }) => {
   const [section, setSection] = useState('profile');
   const [editProfile, setEditProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: profile?.name || '', phone: profile?.phone || '' });
@@ -3621,6 +3621,48 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                   <PWAInstallButton {...pwaInstall} />
                 </div>
               )}
+              {/* Auto-theme panel */}
+              <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-bold text-slate-800 mb-0.5">Tema Otomatis</h4>
+                    <p className="text-xs text-slate-500">Mode tampilan berubah sesuai waktu</p>
+                  </div>
+                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${themeMode === 'auto' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                    {themeMode === 'auto' ? 'AKTIF' : 'MANUAL'}
+                  </span>
+                </div>
+                <div className="space-y-2 mb-4">
+                  {[
+                    { icon: '☀️', label: 'Pagi & Siang', time: '06:00 – 17:59', mode: 'Mode Terang' },
+                    { icon: '🌙', label: 'Malam', time: '18:00 – 05:59', mode: 'Mode Gelap' },
+                  ].map(r => (
+                    <div key={r.label} className="flex items-center gap-3 bg-slate-50 rounded-2xl px-4 py-2.5">
+                      <span className="text-lg">{r.icon}</span>
+                      <div className="flex-1">
+                        <div className="text-xs font-bold text-slate-700">{r.label} <span className="text-slate-400 font-normal">({r.time})</span></div>
+                        <div className="text-[11px] text-slate-500">{r.mode}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={onToggleDark}
+                    className={`flex-1 py-2.5 rounded-2xl text-xs font-bold transition-all border ${!darkMode ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'}`}>
+                    ☀️ Mode Terang
+                  </button>
+                  <button onClick={onToggleDark}
+                    className={`flex-1 py-2.5 rounded-2xl text-xs font-bold transition-all border ${darkMode ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'}`}>
+                    🌙 Mode Gelap
+                  </button>
+                </div>
+                {themeMode !== 'auto' && (
+                  <button onClick={onResetAutoTheme}
+                    className="w-full mt-3 py-2.5 rounded-2xl text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-all">
+                    ✨ Kembalikan ke Mode Otomatis
+                  </button>
+                )}
+              </div>
               <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
                 <h4 className="font-bold text-slate-800 mb-4">Tentang Aplikasi</h4>
               {[['Versi', '2.0.0'], ['Framework', 'React 18'], ['Database', 'Supabase PostgreSQL'], ['Auth', 'Supabase Auth'], ['Hosting', 'Vercel']].map(([k, v]) => (
@@ -4275,14 +4317,51 @@ export default function App() {
   const notifRef = useRef(null);
 
   // ── Dark mode ─────────────────────────────────────────────────────────
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('petcare_dark') === 'true');
+  // ── Auto-theme helpers ──────────────────────────────────────────────
+  // Malam  : 18:00 – 05:59  → dark mode
+  // Pagi/Siang: 06:00 – 17:59 → light mode
+  const getTimeBasedDark = useCallback(() => {
+    const h = new Date().getHours();
+    return h >= 18 || h < 6;
+  }, []);
+
+  // 'auto' | 'manual-dark' | 'manual-light'
+  const [themeMode, setThemeMode] = useState(() => {
+    const saved = localStorage.getItem('petcare_theme_mode');
+    return saved || 'auto';
+  });
+
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('petcare_theme_mode');
+    if (!saved || saved === 'auto') return getTimeBasedDark();
+    return saved === 'manual-dark';
+  });
+
+  // Setiap menit, perbarui mode jika dalam mode auto
+  useEffect(() => {
+    if (themeMode !== 'auto') return;
+    const tick = () => setDarkMode(getTimeBasedDark());
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, [themeMode, getTimeBasedDark]);
+
   const toggleDark = useCallback(() => {
     setDarkMode(prev => {
       const next = !prev;
-      localStorage.setItem('petcare_dark', String(next));
+      const newMode = next ? 'manual-dark' : 'manual-light';
+      setThemeMode(newMode);
+      localStorage.setItem('petcare_theme_mode', newMode);
       return next;
     });
   }, []);
+
+  // Reset ke auto (dipanggil dari Settings)
+  const resetToAutoTheme = useCallback(() => {
+    setThemeMode('auto');
+    localStorage.setItem('petcare_theme_mode', 'auto');
+    setDarkMode(getTimeBasedDark());
+  }, [getTimeBasedDark]);
 
   // ── PWA Install ───────────────────────────────────────────────────────
   const { deferredPrompt, isInstalled, platform, triggerInstall } = usePWAInstall();
@@ -4628,11 +4707,23 @@ export default function App() {
           </div>
           <div className="flex items-center gap-3">
             {/* Dark mode toggle — di samping notif */}
-            <button onClick={toggleDark}
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${darkMode ? 'bg-indigo-100 text-indigo-500' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-              title={darkMode ? 'Mode Terang' : 'Mode Gelap'}>
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
+            <div className="flex flex-col items-center gap-0.5">
+              <button onClick={toggleDark}
+                className={`relative w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${darkMode ? 'bg-indigo-100 text-indigo-500' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                title={themeMode === 'auto' ? `Mode Otomatis (${darkMode ? 'Malam → Gelap' : 'Pagi/Siang → Terang'}) — klik untuk override` : (darkMode ? 'Mode Gelap Manual' : 'Mode Terang Manual')}>
+                {darkMode ? <Moon size={18} /> : <Sun size={18} />}
+                {themeMode === 'auto' && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-white" />
+                )}
+              </button>
+              {themeMode !== 'auto' && (
+                <button onClick={resetToAutoTheme}
+                  className="text-[9px] font-bold text-indigo-400 hover:text-indigo-600 leading-none transition-colors"
+                  title="Kembali ke mode otomatis berdasarkan waktu">
+                  auto
+                </button>
+              )}
+            </div>
             <div className="relative" ref={notifRef}>
               <button onClick={() => setShowNotif(!showNotif)}
                 className={`w-10 h-10 rounded-2xl flex items-center justify-center relative transition-all ${showNotif ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
@@ -4661,7 +4752,7 @@ export default function App() {
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
-              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} schedules={schedules} records={records} />}
+              {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} themeMode={themeMode} onResetAutoTheme={resetToAutoTheme} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} schedules={schedules} records={records} />}
             </div>
           )}
         </div>
