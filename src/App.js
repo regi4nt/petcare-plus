@@ -2747,34 +2747,140 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
           });
           return;
         } else {
-          // BOM agar Excel buka UTF-8 dengan benar (karakter Indonesia tidak rusak)
-          const BOM = '\uFEFF';
-          const rangeLabel = getDateRange().label;
-          const exportDate = new Date().toLocaleString('id-ID');
+          // Export XLSX dengan styling tabel menggunakan SheetJS
+          const loadXLSX = () => new Promise((resolve, reject) => {
+            if (window.XLSX) { resolve(window.XLSX); return; }
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            script.onload = () => resolve(window.XLSX);
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
 
-          // Baris metadata — satu kolom, tidak merusak tabel di bawahnya
-          let csv = BOM;
-          csv += `"PetCare+ — Ekspor Data","${exportDate}","Rentang: ${rangeLabel}"\n\n`;
+          loadXLSX().then(XLSX => {
+            const rangeLabel = getDateRange().label;
+            const exportDate = new Date().toLocaleString('id-ID');
+            const wb = XLSX.utils.book_new();
 
-          if (data.profil_pengguna) {
-            csv += '"=== Profil Pengguna ===",\n';
-            csv += '"Field","Nilai"\n';
-            csv += Object.entries(data.profil_pengguna)
-              .map(([k, v]) => `${escapeCSVCell(k)},${escapeCSVCell(v)}`)
-              .join('\n');
-            csv += '\n\n';
-          }
-          if (data.daftar_hewan) csv += toCSV(data.daftar_hewan, 'Daftar Hewan');
-          if (data.jadwal_kegiatan) csv += toCSV(data.jadwal_kegiatan, 'Jadwal Kegiatan');
-          if (data.rekam_medis) csv += toCSV(data.rekam_medis, 'Rekam Medis');
-          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' }); // BOM already prepended
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `petcare-data-${ts}${rangeSuffix}.csv`;
-          a.click();
-          URL.revokeObjectURL(url);
-          setDownloadDone(true);
+            // Helper: buat sheet dari array of objects dengan header berwarna
+            const makeSheet = (rows, cols) => {
+              if (!rows || rows.length === 0) return null;
+              const headers = cols.map(c => c.label);
+              const aoaData = [headers, ...rows.map(r => cols.map(c => r[c.key] ?? ''))];
+              const ws = XLSX.utils.aoa_to_sheet(aoaData);
+
+              // Set lebar kolom otomatis
+              ws['!cols'] = cols.map(c => ({ wch: Math.max(c.label.length + 2, 18) }));
+
+              // Style header baris pertama (biru indigo)
+              const headerStyle = {
+                font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+                fill: { fgColor: { rgb: '4F46E5' } },
+                alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+                border: {
+                  top: { style: 'thin', color: { rgb: 'FFFFFF' } },
+                  bottom: { style: 'thin', color: { rgb: 'FFFFFF' } },
+                  left: { style: 'thin', color: { rgb: 'FFFFFF' } },
+                  right: { style: 'thin', color: { rgb: 'FFFFFF' } },
+                }
+              };
+              const dataStyle = {
+                alignment: { vertical: 'center', wrapText: true },
+                border: {
+                  top: { style: 'thin', color: { rgb: 'D1D5DB' } },
+                  bottom: { style: 'thin', color: { rgb: 'D1D5DB' } },
+                  left: { style: 'thin', color: { rgb: 'D1D5DB' } },
+                  right: { style: 'thin', color: { rgb: 'D1D5DB' } },
+                }
+              };
+              const dataStyleAlt = {
+                ...dataStyle,
+                fill: { fgColor: { rgb: 'EEF2FF' } }
+              };
+
+              // Apply styles ke header
+              headers.forEach((_, ci) => {
+                const cellRef = XLSX.utils.encode_cell({ r: 0, c: ci });
+                if (!ws[cellRef]) ws[cellRef] = { v: headers[ci] };
+                ws[cellRef].s = headerStyle;
+              });
+
+              // Apply styles ke data rows
+              rows.forEach((_, ri) => {
+                cols.forEach((_, ci) => {
+                  const cellRef = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
+                  if (!ws[cellRef]) ws[cellRef] = { v: '' };
+                  ws[cellRef].s = ri % 2 === 0 ? dataStyle : dataStyleAlt;
+                });
+              });
+
+              // Row height
+              ws['!rows'] = [{ hpt: 22 }, ...rows.map(() => ({ hpt: 18 }))];
+
+              return ws;
+            };
+
+            // Sheet 1: Ringkasan / Info
+            const infoData = [
+              ['PetCare+ — Ekspor Data', ''],
+              ['Tanggal Export', exportDate],
+              ['Rentang Data', rangeLabel],
+              ['', ''],
+            ];
+            if (data.profil_pengguna) {
+              infoData.push(['=== Profil Pengguna ===', '']);
+              infoData.push(['Field', 'Nilai']);
+              Object.entries(data.profil_pengguna).forEach(([k, v]) => infoData.push([k, String(v ?? '')]));
+            }
+            const wsInfo = XLSX.utils.aoa_to_sheet(infoData);
+            wsInfo['!cols'] = [{ wch: 28 }, { wch: 40 }];
+            // Style judul
+            if (wsInfo['A1']) wsInfo['A1'].s = { font: { bold: true, sz: 13, color: { rgb: '4F46E5' } } };
+            if (wsInfo['A5']) wsInfo['A5'].s = { font: { bold: true, sz: 11 } };
+            XLSX.utils.book_append_sheet(wb, wsInfo, 'Ringkasan');
+
+            // Sheet 2: Daftar Hewan
+            if (data.daftar_hewan && data.daftar_hewan.length > 0) {
+              const ws = makeSheet(data.daftar_hewan, [
+                { label: 'Nama', key: 'nama' },
+                { label: 'Jenis', key: 'jenis' },
+                { label: 'Ras', key: 'ras' },
+                { label: 'Tanggal Lahir', key: 'tanggal_lahir' },
+                { label: 'Berat (kg)', key: 'berat_kg' },
+                { label: 'Catatan', key: 'catatan' },
+              ]);
+              if (ws) XLSX.utils.book_append_sheet(wb, ws, 'Daftar Hewan');
+            }
+
+            // Sheet 3: Jadwal Kegiatan
+            if (data.jadwal_kegiatan && data.jadwal_kegiatan.length > 0) {
+              const ws = makeSheet(data.jadwal_kegiatan, [
+                { label: 'Pet ID', key: 'pet_id' },
+                { label: 'Jenis Kegiatan', key: 'jenis_kegiatan' },
+                { label: 'Jadwal Waktu', key: 'jadwal_waktu' },
+                { label: 'Status', key: 'status' },
+                { label: 'Catatan', key: 'catatan' },
+              ]);
+              if (ws) XLSX.utils.book_append_sheet(wb, ws, 'Jadwal Kegiatan');
+            }
+
+            // Sheet 4: Rekam Medis
+            if (data.rekam_medis && data.rekam_medis.length > 0) {
+              const ws = makeSheet(data.rekam_medis, [
+                { label: 'Pet ID', key: 'pet_id' },
+                { label: 'Jenis Rekaman', key: 'jenis_rekaman' },
+                { label: 'Tanggal', key: 'tanggal_rekaman' },
+                { label: 'Diagnosis', key: 'diagnosis' },
+                { label: 'Catatan', key: 'catatan' },
+              ]);
+              if (ws) XLSX.utils.book_append_sheet(wb, ws, 'Rekam Medis');
+            }
+
+            XLSX.writeFile(wb, `petcare-data-${ts}${rangeSuffix}.xlsx`);
+            setDownloadDone(true);
+          }).catch(() => {
+            alert('Gagal memuat library Excel. Pastikan koneksi internet aktif.');
+          });
         }
       } finally {
         setDownloading(false);
@@ -3333,7 +3439,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { fmt: 'json', label: 'JSON', desc: 'Lengkap & terstruktur', icon: FileText, tip: 'Cocok untuk backup data atau developer' },
-                    { fmt: 'csv',  label: 'CSV',  desc: 'Buka di Excel/Sheets',  icon: Activity, tip: 'Cocok untuk analisis spreadsheet' },
+                    { fmt: 'csv',  label: 'XLSX', desc: 'Excel dengan desain tabel', icon: Activity, tip: 'Tabel berwarna, multi-sheet, siap dibuka di Excel/Sheets' },
                     { fmt: 'pdf',  label: 'PDF',  desc: 'Laporan siap cetak',     icon: FileText, tip: 'Cocok untuk laporan & arsip dokumen' },
                   ].map(({ fmt, label, desc, icon: FIcon, tip }) => (
                     <button key={fmt} onClick={() => setDownloadFormat(fmt)}
@@ -3354,7 +3460,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="font-bold text-slate-800 text-sm">{countSelected} kategori dipilih</p>
-                    <p className="text-xs text-slate-500">Format: .{downloadFormat.toUpperCase()} · {getDateRange().label}</p>
+                    <p className="text-xs text-slate-500">Format: .{downloadFormat === 'csv' ? 'XLSX' : downloadFormat.toUpperCase()} · {getDateRange().label}</p>
                   </div>
                   {downloadDone && (
                     <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full">
