@@ -2908,7 +2908,6 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
             alert('Gagal memuat library Excel. Pastikan koneksi internet aktif.');
           });
         }
-        }
       } finally {
         setDownloading(false);
       }
