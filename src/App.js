@@ -17,6 +17,29 @@ import { authService, profileService, petService, scheduleService, recordService
 import { HibernationControlModal } from './components/HibernationControl';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 
+// ─── ROLE SYSTEM ──────────────────────────────────────────────────────
+// Tiga jenis akun:
+//   Subscribe  – pengguna berlangganan penuh (default akun baru)
+//   Demo       – akun percobaan, fitur terbatas (baca saja)
+//   Admin      – akses penuh + fitur manajemen khusus
+const ROLES = { SUBSCRIBE: 'Subscribe', DEMO: 'Demo', ADMIN: 'Admin' };
+
+// Warna badge per role
+const ROLE_BADGE = {
+  Subscribe: { bg: 'bg-indigo-50',  text: 'text-indigo-600',  label: '⭐ Subscribe' },
+  Demo:      { bg: 'bg-amber-50',   text: 'text-amber-600',   label: '🔍 Demo' },
+  Admin:     { bg: 'bg-rose-50',    text: 'text-rose-600',    label: '🛡️ Admin' },
+};
+
+// Helper: kembalikan badge style & label untuk role tertentu
+const getRoleBadge = (role) => ROLE_BADGE[role] || ROLE_BADGE[ROLES.SUBSCRIBE];
+
+// Helper: cek apakah role boleh menulis/mengubah data
+const canWrite = (role) => role !== ROLES.DEMO;
+
+// Helper: cek apakah role adalah Admin
+const isAdmin = (role) => role === ROLES.ADMIN;
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────
 const PET_ICONS = {
   Kucing: Cat,
@@ -1442,8 +1465,8 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   return (
     <div className="space-y-6">
 
-      {/* ── Streak Card (Basic) ── */}
-      {(profile?.role === 'Basic' || !profile?.role) && (() => {
+      {/* ── Streak Card (Subscribe) ── */}
+      {(profile?.role === 'Subscribe' || !profile?.role) && (() => {
         const nextMilestone = streak < 7 ? 7 : streak < 14 ? 14 : streak < 30 ? 30 : streak < 60 ? 60 : streak < 100 ? 100 : null;
         const progressTarget = nextMilestone || 100;
         const progressPct = Math.min((streak / progressTarget) * 100, 100);
@@ -2515,7 +2538,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
         nama: profile?.name || '-',
         email: user?.email || '-',
         telepon: profile?.phone || '-',
-        role: profile?.role || 'Basic',
+        role: profile?.role || 'Subscribe',
         rentang_data: rangeLabel,
         tanggal_ekspor: new Date().toLocaleString('id-ID'),
       };
@@ -3063,7 +3086,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                 <div>
                   <p className="font-black text-slate-800 text-lg">{profile?.name || '-'}</p>
                   <p className="text-xs text-slate-500">{user?.email}</p>
-                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full inline-block mt-1 uppercase">{profile?.role || 'Basic'}</span>
+                  {(() => { const rb = getRoleBadge(profile?.role || ROLES.SUBSCRIBE); return <span className={`text-[10px] font-bold ${rb.text} ${rb.bg} px-2 py-0.5 rounded-full inline-block mt-1 uppercase`}>{rb.label}</span>; })()}
                 </div>
               </div>
               {editProfile ? (
@@ -3076,7 +3099,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {[['Nama', profile?.name || '-'], ['Email', user?.email || '-'], ['Telepon', profile?.phone || '-'], ['Role', profile?.role || 'Basic']].map(([k, v]) => (
+                  {[['Nama', profile?.name || '-'], ['Email', user?.email || '-'], ['Telepon', profile?.phone || '-'], ['Role', profile?.role || 'Subscribe']].map(([k, v]) => (
                     <div key={k} className="flex justify-between py-2.5 border-b border-slate-50 last:border-0">
                       <span className="text-sm text-slate-500">{k}</span>
                       <span className="text-sm font-bold text-slate-800">{v}</span>
@@ -4470,8 +4493,8 @@ export default function App() {
         const isNewUser = !prof || (prof.login_streak || 0) <= 1;
         if (isNewUser) setTimeout(() => setShowPWAModal(true), 1500);
       }
-      // Update streak harian (hanya Basic)
-      if (prof?.role === 'Basic' || !prof?.role) {
+      // Update streak harian (hanya Subscribe)
+      if (prof?.role === 'Subscribe' || !prof?.role) {
         profileService.updateStreak(uid)
           .then(res => { if (res.changed) setStreak(res.streak); })
           .catch(() => {});
@@ -4496,7 +4519,17 @@ export default function App() {
     showToast('Profil berhasil diperbarui');
   };
 
+  // Guard untuk akun Demo — blokir semua aksi tulis
+  const demoGuard = () => {
+    if (profile?.role === ROLES.DEMO) {
+      showToast('Akun Demo hanya bisa melihat data. Upgrade ke Subscribe untuk fitur penuh.', 'error');
+      return true;
+    }
+    return false;
+  };
+
   const handleAddPet = async (form) => {
+    if (demoGuard()) return;
     setPetLoading(true);
     try {
       const { age_unit, ...petData } = form; // strip age_unit — not a DB column
@@ -4510,6 +4543,7 @@ export default function App() {
   };
 
   const handleUpdatePet = async (petId, data) => {
+    if (demoGuard()) return;
     const updated = await petService.update(petId, data);
     setPets(prev => prev.map(p => p.id === petId ? updated : p));
     if (selectedPet?.id === petId) setSelectedPet(updated);
@@ -4517,6 +4551,7 @@ export default function App() {
   };
 
   const handleDeletePet = async (petId) => {
+    if (demoGuard()) return;
     const pet = pets.find(p => p.id === petId);
     await petService.delete(petId);
     const remaining = pets.filter(p => p.id !== petId);
@@ -4526,6 +4561,7 @@ export default function App() {
   };
 
   const handleAddSchedule = async (form) => {
+    if (demoGuard()) return;
     const newS = await scheduleService.create(session.user.id, form);
     setSchedules(prev => [...prev, newS]);
     const pet = pets.find(p => p.id === form.pet_id);
@@ -4533,6 +4569,7 @@ export default function App() {
   };
 
   const handleToggleSchedule = async (id, done) => {
+    if (demoGuard()) return;
     const updated = await scheduleService.toggleDone(id, done);
     setSchedules(prev => prev.map(s => s.id === id ? updated : s));
     if (done) {
@@ -4541,12 +4578,14 @@ export default function App() {
   };
 
   const handleDeleteSchedule = async (id) => {
+    if (demoGuard()) return;
     await scheduleService.delete(id);
     setSchedules(prev => prev.filter(s => s.id !== id));
     showToast('Jadwal dihapus', 'info');
   };
 
   const handleAddRecord = async (form) => {
+    if (demoGuard()) return;
     const newR = await recordService.create(session.user.id, form);
     setRecords(prev => [newR, ...prev]);
     const pet = pets.find(p => p.id === form.pet_id);
@@ -4554,6 +4593,7 @@ export default function App() {
   };
 
   const handleDeleteRecord = async (id) => {
+    if (demoGuard()) return;
     await recordService.delete(id);
     setRecords(prev => prev.filter(r => r.id !== id));
     showToast('Catatan dihapus', 'info');
@@ -4624,12 +4664,14 @@ export default function App() {
     { id: 'schedule',  icon: Calendar,         label: 'Jadwal Kegiatan', mobileLabel: 'Kegiatan' },
     { id: 'medical',   icon: FileText,         label: 'Rekam Medis',     mobileLabel: 'Rekam Medis' },
     { id: 'settings',  icon: Settings,         label: 'Pengaturan',      mobileLabel: 'Pengaturan' },
+    // Tab Admin hanya muncul untuk role Admin
+    ...(isAdmin(profile?.role) ? [{ id: 'admin', icon: Lock, label: 'Panel Admin', mobileLabel: 'Admin' }] : []),
   ];
   // Nav khusus mobile — tanpa Pengaturan (akses via avatar/header)
   const MOBILE_NAV = NAV.filter(n => n.id !== 'settings');
 
   const unreadCount = notifications.filter(n => n.unread).length;
-  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan' };
+  const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan', admin: 'Panel Admin' };
 
 
 
@@ -4738,7 +4780,7 @@ export default function App() {
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleTabChange('settings')}>
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-bold text-slate-800">{(profile?.name || session.user.email || '').split(' ')[0]}</p>
-                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">{profile?.role || 'Basic'}</p>
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${getRoleBadge(profile?.role || ROLES.SUBSCRIBE).text}`}>{getRoleBadge(profile?.role || ROLES.SUBSCRIBE).label}</p>
               </div>
               <UserAvatar name={profile?.name || session.user.email} size="md" />
             </div>
@@ -4746,6 +4788,18 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {/* ── Banner Demo Mode ── */}
+          {profile?.role === ROLES.DEMO && (
+            <div className="max-w-6xl mx-auto mb-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3">
+                <span className="text-xl">🔍</span>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-amber-800">Mode Demo Aktif</p>
+                  <p className="text-xs text-amber-700">Anda hanya bisa melihat data. Semua aksi tambah, edit, dan hapus dinonaktifkan. Hubungi admin untuk upgrade ke Akun Subscribe.</p>
+                </div>
+              </div>
+            </div>
+          )}
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
               {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
@@ -4753,6 +4807,44 @@ export default function App() {
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
               {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} themeMode={themeMode} onResetAutoTheme={resetToAutoTheme} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} schedules={schedules} records={records} />}
+
+              {/* ── PANEL ADMIN (hanya untuk role Admin) ── */}
+              {activeTab === 'admin' && isAdmin(profile?.role) && (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 bg-rose-100 rounded-2xl flex items-center justify-center">
+                        <span className="text-xl">🛡️</span>
+                      </div>
+                      <div>
+                        <h2 className="font-black text-slate-800 text-xl">Panel Admin</h2>
+                        <p className="text-xs text-slate-500">Manajemen sistem & pengguna</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {[
+                        { label: 'Total Pengguna', value: '—', icon: '👥', color: 'bg-indigo-50 text-indigo-700' },
+                        { label: 'Akun Subscribe', value: '—', icon: '⭐', color: 'bg-blue-50 text-blue-700' },
+                        { label: 'Akun Demo', value: '—', icon: '🔍', color: 'bg-amber-50 text-amber-700' },
+                      ].map(item => (
+                        <div key={item.label} className={`rounded-2xl p-4 ${item.color}`}>
+                          <p className="text-2xl mb-1">{item.icon}</p>
+                          <p className="text-2xl font-black">{item.value}</p>
+                          <p className="text-xs font-semibold opacity-70">{item.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-6 p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                      <p className="text-sm font-bold text-rose-700 mb-1">🔐 Akses Admin Aktif</p>
+                      <p className="text-xs text-rose-600">Anda login sebagai <strong>{profile?.name || session.user.email}</strong> dengan hak akses penuh. Gunakan dengan bijak.</p>
+                    </div>
+                    <div className="mt-4 p-4 bg-slate-50 rounded-2xl">
+                      <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-3">Panduan Pengaturan Role via Supabase</p>
+                      <p className="text-xs text-slate-600 leading-relaxed">Untuk mengubah role pengguna, buka <strong>Supabase Dashboard → Table Editor → profiles</strong>, lalu ubah kolom <code className="bg-slate-200 px-1 rounded">role</code> ke salah satu dari: <code className="bg-slate-200 px-1 rounded">Subscribe</code>, <code className="bg-amber-100 px-1 rounded">Demo</code>, atau <code className="bg-rose-100 px-1 rounded">Admin</code>.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
