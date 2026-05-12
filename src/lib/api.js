@@ -17,14 +17,9 @@ export const authService = {
     });
     if (error) throw error;
 
-    if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        name,
-        phone,
-        role: 'Basic',
-      });
-    }
+    // Catatan: profile dibuat otomatis oleh trigger `handle_new_user` di Supabase
+    // dengan role default 'Subscribe'. Tidak perlu upsert manual di sini —
+    // upsert manual bentrok dengan trigger dan menyebabkan constraint error.
     return data;
   },
 
