@@ -17,9 +17,14 @@ export const authService = {
     });
     if (error) throw error;
 
-    // Catatan: profile dibuat otomatis oleh trigger `handle_new_user` di Supabase
-    // dengan role default 'Subscribe'. Tidak perlu upsert manual di sini —
-    // upsert manual bentrok dengan trigger dan menyebabkan constraint error.
+    // Akun baru otomatis mendapat role 'Demo'.
+    // Trigger handle_new_user membuat profile dengan role 'Subscribe' (default schema),
+    // lalu kita update ke 'Demo' setelah user ID tersedia.
+    if (data?.user?.id) {
+      // Tunggu sebentar agar trigger selesai membuat row profile terlebih dahulu
+      await new Promise(r => setTimeout(r, 800));
+      await supabase.from('profiles').update({ role: 'Demo' }).eq('id', data.user.id);
+    }
     return data;
   },
 
@@ -546,5 +551,37 @@ export const deviceCommandService = {
       )
       .subscribe();
     return channel;
+  },
+};
+
+// ─── ADMIN SERVICE ────────────────────────────────────────────────────
+
+export const adminService = {
+  /**
+   * Ambil semua profil pengguna (hanya Admin yang bisa).
+   */
+  async getAllProfiles() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, name, phone, role, created_at, login_streak, last_login_date')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Update role pengguna (Admin only).
+   * @param {string} userId - UUID pengguna target
+   * @param {string} role   - 'Subscribe' | 'Demo' | 'Admin'
+   */
+  async updateRole(userId, role) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   },
 };

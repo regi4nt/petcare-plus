@@ -13,7 +13,7 @@ import {
   Download, Smartphone, Monitor, Share2, ArrowDown, MoreHorizontal, Chrome,
   Zap, LogIn
 } from 'lucide-react';
-import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService, deviceCommandService } from './lib/api';
+import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService, deviceCommandService, adminService } from './lib/api';
 import { HibernationControlModal } from './components/HibernationControl';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 
@@ -39,6 +39,49 @@ const canWrite = (role) => role !== ROLES.DEMO;
 
 // Helper: cek apakah role adalah Admin
 const isAdmin = (role) => role === ROLES.ADMIN;
+
+// ─── DEMO DATA (Simulasi untuk akun Demo) ─────────────────────────────
+const DEMO_PETS = [
+  { id: 'demo-pet-1', name: 'Mochi', species: 'Kucing', breed: 'Persian', age: 2, age_unit: 'tahun', weight: 4.2, gender: 'Betina', color: 'Putih', user_id: 'demo', created_at: new Date().toISOString() },
+  { id: 'demo-pet-2', name: 'Rocky', species: 'Anjing', breed: 'Shiba Inu', age: 1, age_unit: 'tahun', weight: 8.5, gender: 'Jantan', color: 'Coklat', user_id: 'demo', created_at: new Date().toISOString() },
+];
+
+const today = new Date().toISOString().split('T')[0];
+const DEMO_SCHEDULES = [
+  { id: 'demo-sched-1', pet_id: 'demo-pet-1', title: 'Makan Pagi Mochi', type: 'Makan', date: today, time: '07:00', done: true, user_id: 'demo' },
+  { id: 'demo-sched-2', pet_id: 'demo-pet-1', title: 'Vaksin Tahunan Mochi', type: 'Vaksinasi', date: today, time: '10:00', done: false, user_id: 'demo' },
+  { id: 'demo-sched-3', pet_id: 'demo-pet-2', title: 'Jalan Pagi Rocky', type: 'Olahraga', date: today, time: '06:00', done: true, user_id: 'demo' },
+  { id: 'demo-sched-4', pet_id: 'demo-pet-2', title: 'Mandi Rocky', type: 'Mandi', date: today, time: '16:00', done: false, user_id: 'demo' },
+];
+
+const DEMO_RECORDS = [
+  { id: 'demo-rec-1', pet_id: 'demo-pet-1', type: 'Vaksinasi', title: 'Vaksin Rabies', date: '2024-03-10', notes: 'Reaksi normal, sehat', vet: 'drh. Siti Rahayu', user_id: 'demo' },
+  { id: 'demo-rec-2', pet_id: 'demo-pet-1', type: 'Pemeriksaan', title: 'Cek Rutin Bulanan', date: '2024-04-15', notes: 'Berat badan ideal, gigi bersih', vet: 'drh. Budi Santoso', user_id: 'demo' },
+  { id: 'demo-rec-3', pet_id: 'demo-pet-2', title: 'Vaksin Distemper', type: 'Vaksinasi', date: '2024-02-20', notes: 'Sehat, aktif', vet: 'drh. Siti Rahayu', user_id: 'demo' },
+];
+
+const DEMO_NOTIFICATIONS = [
+  { id: 'demo-notif-1', text: 'Selamat datang di mode Demo! Data ini adalah simulasi.', type: 'info', unread: true, created_at: new Date().toISOString(), user_id: 'demo' },
+  { id: 'demo-notif-2', text: 'Vaksin Tahunan Mochi dijadwalkan hari ini pukul 10:00', type: 'warning', unread: true, created_at: new Date().toISOString(), user_id: 'demo' },
+];
+
+// Simulasi data IoT monitoring untuk akun Demo
+const generateDemoMonitoring = () => {
+  const now = Date.now();
+  return Array.from({ length: 20 }, (_, i) => ({
+    id: `demo-mon-${i}`,
+    pet_id: 'demo-pet-1',
+    suhu: (38.0 + Math.sin(i * 0.5) * 0.8).toFixed(1),
+    heart_rate: Math.round(85 + Math.sin(i * 0.3) * 15),
+    spo2: Math.round(97 + Math.sin(i * 0.2) * 2),
+    ax: (Math.random() * 2 - 1).toFixed(2),
+    ay: (Math.random() * 2 - 1).toFixed(2),
+    az: (Math.random() * 2 - 1).toFixed(2),
+    mode: 'normal',
+    created_at: new Date(now - i * 3 * 60 * 1000).toISOString(),
+  }));
+};
+
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────
 const PET_ICONS = {
@@ -1286,10 +1329,34 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
     if (!petId) return;
     setIotLoading(true);
     try {
-      const [calc, daily] = await Promise.all([
-        monitoringService.getCalculated(petId, 20),
-        monitoringService.getDailyHealth(petId, 7),
-      ]);
+      // Akun Demo: gunakan data IoT simulasi
+      let calc, daily;
+      if (profile?.role === 'Demo') {
+        const demoMon = generateDemoMonitoring();
+        const avgFn = (arr, field) => {
+          const vals = arr.map(d => parseFloat(d[field])).filter(v => !isNaN(v));
+          return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        };
+        calc = {
+          avg_suhu: avgFn(demoMon, 'suhu'),
+          avg_heart_rate: avgFn(demoMon, 'heart_rate'),
+          avg_spo2: avgFn(demoMon, 'spo2'),
+          latest_mode: 'normal',
+          reading_count: demoMon.length,
+          last_reading_at: demoMon[0]?.created_at,
+          ax_history: demoMon.map(d => d.ax),
+        };
+        const todayStr2 = new Date().toISOString().split('T')[0];
+        daily = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(); d.setDate(d.getDate() - (6 - i));
+          return { date: d.toISOString().split('T')[0], score: 75 + Math.round(Math.sin(i) * 15), reading_count: 20, avg_suhu: 38.2, avg_hr: 88, avg_spo2: 97 };
+        });
+      } else {
+        [calc, daily] = await Promise.all([
+          monitoringService.getCalculated(petId, 20),
+          monitoringService.getDailyHealth(petId, 7),
+        ]);
+      }
       setIotCalc(calc);
       setDailyHealth(daily || []);
 
@@ -3806,7 +3873,7 @@ const AddPetModal = ({ onClose, onAdd, loading }) => {
 
 
 // ─── MONITOR PAGE (IoT) ───────────────────────────────────────────────
-const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) => {
+const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, profile }) => {
   const [latest, setLatest] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -3818,6 +3885,14 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
     if (!petId) return;
     setLoading(true);
     try {
+      // Akun Demo: gunakan data IoT simulasi, tidak ke Supabase
+      if (profile?.role === 'Demo') {
+        const demoMon = generateDemoMonitoring();
+        setLatest(demoMon[0]);
+        setHistory(demoMon.slice().reverse());
+        setLastUpdate(new Date());
+        return;
+      }
       const [one, hist] = await Promise.all([
         monitoringService.getOne(petId),
         monitoringService.getLatest(petId, 15),
@@ -3830,7 +3905,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile?.role]);
 
   useEffect(() => {
     if (!selectedPet) return;
@@ -4317,6 +4392,192 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
   );
 };
 
+
+// ─── ADMIN PANEL COMPONENT ────────────────────────────────────────────
+const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [updating, setUpdating] = useState(null); // userId yang sedang diupdate
+  const [search, setSearch] = useState('');
+  const [filterRole, setFilterRole] = useState('all');
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const data = await adminService.getAllProfiles();
+      setUsers(data);
+    } catch (e) {
+      showToast('Gagal memuat daftar pengguna. Pastikan RLS Supabase mengizinkan Admin membaca semua profiles.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadUsers(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRoleChange = async (userId, newRole) => {
+    setUpdating(userId);
+    try {
+      await adminService.updateRole(userId, newRole);
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      showToast(`Role berhasil diubah ke ${newRole}`);
+    } catch (e) {
+      showToast('Gagal mengubah role. Pastikan RLS Supabase mengizinkan Admin update profiles.', 'error');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const filtered = users.filter(u => {
+    const matchSearch = !search || (u.name || '').toLowerCase().includes(search.toLowerCase());
+    const matchRole = filterRole === 'all' || u.role === filterRole;
+    return matchSearch && matchRole;
+  });
+
+  const countByRole = (role) => users.filter(u => u.role === role).length;
+
+  const ROLE_OPTIONS = [
+    { value: 'Subscribe', label: '⭐ Subscribe', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+    { value: 'Demo',      label: '🔍 Demo',      cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { value: 'Admin',     label: '🛡️ Admin',     cls: 'bg-rose-50 text-rose-700 border-rose-200' },
+  ];
+
+  const getRoleCls = (role) => {
+    if (role === 'Subscribe') return 'bg-indigo-50 text-indigo-700';
+    if (role === 'Demo')      return 'bg-amber-50 text-amber-700';
+    if (role === 'Admin')     return 'bg-rose-50 text-rose-700';
+    return 'bg-slate-100 text-slate-600';
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header Card */}
+      <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-rose-100 rounded-2xl flex items-center justify-center">
+            <span className="text-xl">🛡️</span>
+          </div>
+          <div>
+            <h2 className="font-black text-slate-800 text-xl">Panel Admin</h2>
+            <p className="text-xs text-slate-500">Manajemen sistem & pengguna</p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: 'Total Pengguna', value: users.length, icon: '👥', color: 'bg-indigo-50 text-indigo-700' },
+            { label: 'Akun Subscribe', value: countByRole('Subscribe'), icon: '⭐', color: 'bg-blue-50 text-blue-700' },
+            { label: 'Akun Demo',      value: countByRole('Demo'),      icon: '🔍', color: 'bg-amber-50 text-amber-700' },
+          ].map(item => (
+            <div key={item.label} className={`rounded-2xl p-4 ${item.color}`}>
+              <p className="text-2xl mb-1">{item.icon}</p>
+              <p className="text-2xl font-black">{loading ? '…' : item.value}</p>
+              <p className="text-xs font-semibold opacity-70">{item.label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 p-4 bg-rose-50 rounded-2xl border border-rose-100">
+          <p className="text-sm font-bold text-rose-700 mb-1">🔐 Akses Admin Aktif</p>
+          <p className="text-xs text-rose-600">Anda login sebagai <strong>{adminProfile?.name || adminEmail}</strong> dengan hak akses penuh. Gunakan dengan bijak.</p>
+        </div>
+      </div>
+
+      {/* Account Management Card */}
+      <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-bold text-slate-800 text-base">Kelola Akun Pengguna</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Ubah role akun Subscribe, Demo, atau Admin</p>
+          </div>
+          <button onClick={loadUsers} disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-semibold text-slate-600 transition-colors">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
+
+        {/* Filter & Search */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="Cari nama pengguna…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          />
+          <select
+            value={filterRole}
+            onChange={e => setFilterRole(e.target.value)}
+            className="text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
+            <option value="all">Semua Role</option>
+            <option value="Subscribe">Subscribe</option>
+            <option value="Demo">Demo</option>
+            <option value="Admin">Admin</option>
+          </select>
+        </div>
+
+        {/* User List */}
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-slate-400">
+            <Loader2 size={22} className="animate-spin mr-2" /> Memuat pengguna…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 text-sm">
+            {search || filterRole !== 'all' ? 'Tidak ada pengguna yang cocok dengan filter.' : 'Belum ada data pengguna.'}
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {filtered.map(user => (
+              <div key={user.id}
+                className="flex items-center gap-3 p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
+                {/* Avatar */}
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center shrink-0">
+                  <span className="text-white text-sm font-bold">
+                    {(user.name || '?')[0].toUpperCase()}
+                  </span>
+                </div>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-800 text-sm truncate">{user.name || '(tanpa nama)'}</p>
+                  <p className="text-xs text-slate-400 truncate">{user.phone || '—'}</p>
+                </div>
+                {/* Current Role Badge */}
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${getRoleCls(user.role)}`}>
+                  {user.role || 'Subscribe'}
+                </span>
+                {/* Role Change Select */}
+                <div className="relative shrink-0">
+                  {updating === user.id ? (
+                    <Loader2 size={16} className="animate-spin text-indigo-500" />
+                  ) : (
+                    <select
+                      value={user.role || 'Subscribe'}
+                      onChange={e => handleRoleChange(user.id, e.target.value)}
+                      className="text-xs px-2 py-1.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer">
+                      {ROLE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Info Note */}
+        <div className="mt-4 p-3 bg-blue-50 rounded-2xl">
+          <p className="text-xs text-blue-700 leading-relaxed">
+            <strong>ℹ️ Catatan:</strong> Perubahan role langsung tersimpan ke Supabase. Pastikan RLS policy tabel <code className="bg-blue-100 px-1 rounded">profiles</code> mengizinkan Admin membaca & mengupdate semua baris.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────
 export default function App() {
   const [session, setSession] = useState(null);
@@ -4474,35 +4735,53 @@ export default function App() {
     }
     const uid = session.user.id;
     setDataLoading(true);
-    Promise.all([
-      profileService.get(uid).catch(() => null),
-      petService.getAll(uid),
-      scheduleService.getAll(uid),
-      recordService.getAll(uid),
-      notifService.getAll(uid),
-    ]).then(([prof, pts, scheds, recs, notifs]) => {
+    // Ambil profile dulu untuk cek role
+    profileService.get(uid).catch(() => null).then(prof => {
       setProfile(prof);
-      setStreak(prof?.login_streak || 0);
-      setPets(pts);
-      setSelectedPet(pts[0] || null);
-      setSchedules(scheds);
-      setRecords(recs);
-      setNotifications(notifs);
-      // Show PWA install modal for new users
-      if (!isInstalled && !localStorage.getItem('petcare_pwa_dismissed')) {
-        const isNewUser = !prof || (prof.login_streak || 0) <= 1;
-        if (isNewUser) setTimeout(() => setShowPWAModal(true), 1500);
+      // ── Akun Demo: gunakan data simulasi, tidak ke Supabase ─────────
+      if (prof?.role === 'Demo') {
+        setStreak(0);
+        setPets(DEMO_PETS);
+        setSelectedPet(DEMO_PETS[0]);
+        setSchedules(DEMO_SCHEDULES);
+        setRecords(DEMO_RECORDS);
+        setNotifications(DEMO_NOTIFICATIONS);
+        setDataLoading(false);
+        return;
       }
-      // Update streak harian (hanya Subscribe)
-      if (prof?.role === 'Subscribe' || !prof?.role) {
-        profileService.updateStreak(uid)
-          .then(res => { if (res.changed) setStreak(res.streak); })
-          .catch(() => {});
-      }
+      // ── Akun Subscribe / Admin: ambil data real dari Supabase ────────
+      Promise.all([
+        petService.getAll(uid),
+        scheduleService.getAll(uid),
+        recordService.getAll(uid),
+        notifService.getAll(uid),
+      ]).then(([pts, scheds, recs, notifs]) => {
+        setStreak(prof?.login_streak || 0);
+        setPets(pts);
+        setSelectedPet(pts[0] || null);
+        setSchedules(scheds);
+        setRecords(recs);
+        setNotifications(notifs);
+        // Show PWA install modal for new users
+        if (!isInstalled && !localStorage.getItem('petcare_pwa_dismissed')) {
+          const isNewUser = !prof || (prof.login_streak || 0) <= 1;
+          if (isNewUser) setTimeout(() => setShowPWAModal(true), 1500);
+        }
+        // Update streak harian (hanya Subscribe)
+        if (prof?.role === 'Subscribe' || !prof?.role) {
+          profileService.updateStreak(uid)
+            .then(res => { if (res.changed) setStreak(res.streak); })
+            .catch(() => {});
+        }
+      }).catch(e => {
+        console.error(e);
+        showToast('Gagal memuat data dari Supabase', 'error');
+      }).finally(() => setDataLoading(false));
     }).catch(e => {
       console.error(e);
-      showToast('Gagal memuat data dari Supabase', 'error');
-    }).finally(() => setDataLoading(false));
+      showToast('Gagal memuat profil dari Supabase', 'error');
+      setDataLoading(false);
+    });
   }, [session, showToast]);
 
   // Close notif panel on outside click
@@ -4794,8 +5073,8 @@ export default function App() {
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3">
                 <span className="text-xl">🔍</span>
                 <div className="flex-1">
-                  <p className="text-sm font-bold text-amber-800">Mode Demo Aktif</p>
-                  <p className="text-xs text-amber-700">Anda hanya bisa melihat data. Semua aksi tambah, edit, dan hapus dinonaktifkan. Hubungi admin untuk upgrade ke Akun Subscribe.</p>
+                  <p className="text-sm font-bold text-amber-800">Mode Demo Aktif — Data Simulasi</p>
+                  <p className="text-xs text-amber-700">Semua data yang ditampilkan adalah <strong>simulasi</strong>, bukan data IoT real. Aksi tambah, edit, dan hapus dinonaktifkan. Hubungi admin untuk upgrade ke Akun Subscribe.</p>
                 </div>
               </div>
             </div>
@@ -4803,47 +5082,14 @@ export default function App() {
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
               {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
-              {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} />}
+              {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} profile={profile} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
               {activeTab === 'settings' && <SettingsPage user={session.user} profile={profile} onUpdateProfile={handleUpdateProfile} onLogout={handleLogout} pets={pets} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} darkMode={darkMode} onToggleDark={toggleDark} themeMode={themeMode} onResetAutoTheme={resetToAutoTheme} notifSettings={notifSettings} onSaveNotifSettings={saveNotifSettings} pwaInstall={{ platform, deferredPrompt, triggerInstall, isInstalled }} schedules={schedules} records={records} />}
 
               {/* ── PANEL ADMIN (hanya untuk role Admin) ── */}
               {activeTab === 'admin' && isAdmin(profile?.role) && (
-                <div className="space-y-6">
-                  <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-10 h-10 bg-rose-100 rounded-2xl flex items-center justify-center">
-                        <span className="text-xl">🛡️</span>
-                      </div>
-                      <div>
-                        <h2 className="font-black text-slate-800 text-xl">Panel Admin</h2>
-                        <p className="text-xs text-slate-500">Manajemen sistem & pengguna</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {[
-                        { label: 'Total Pengguna', value: '—', icon: '👥', color: 'bg-indigo-50 text-indigo-700' },
-                        { label: 'Akun Subscribe', value: '—', icon: '⭐', color: 'bg-blue-50 text-blue-700' },
-                        { label: 'Akun Demo', value: '—', icon: '🔍', color: 'bg-amber-50 text-amber-700' },
-                      ].map(item => (
-                        <div key={item.label} className={`rounded-2xl p-4 ${item.color}`}>
-                          <p className="text-2xl mb-1">{item.icon}</p>
-                          <p className="text-2xl font-black">{item.value}</p>
-                          <p className="text-xs font-semibold opacity-70">{item.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-6 p-4 bg-rose-50 rounded-2xl border border-rose-100">
-                      <p className="text-sm font-bold text-rose-700 mb-1">🔐 Akses Admin Aktif</p>
-                      <p className="text-xs text-rose-600">Anda login sebagai <strong>{profile?.name || session.user.email}</strong> dengan hak akses penuh. Gunakan dengan bijak.</p>
-                    </div>
-                    <div className="mt-4 p-4 bg-slate-50 rounded-2xl">
-                      <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-3">Panduan Pengaturan Role via Supabase</p>
-                      <p className="text-xs text-slate-600 leading-relaxed">Untuk mengubah role pengguna, buka <strong>Supabase Dashboard → Table Editor → profiles</strong>, lalu ubah kolom <code className="bg-slate-200 px-1 rounded">role</code> ke salah satu dari: <code className="bg-slate-200 px-1 rounded">Subscribe</code>, <code className="bg-amber-100 px-1 rounded">Demo</code>, atau <code className="bg-rose-100 px-1 rounded">Admin</code>.</p>
-                    </div>
-                  </div>
-                </div>
+                <AdminPanel adminProfile={profile} adminEmail={session.user.email} showToast={showToast} />
               )}
             </div>
           )}

@@ -11,7 +11,7 @@ create table if not exists profiles (
   id uuid references auth.users on delete cascade primary key,
   name text not null default '',
   phone text default '',
-  role text default 'Subscribe' check (role in ('Subscribe', 'Demo', 'Admin')),
+  role text default 'Demo' check (role in ('Subscribe', 'Demo', 'Admin')),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -162,7 +162,7 @@ begin
     new.id,
     coalesce(new.raw_user_meta_data->>'name', ''),
     coalesce(new.raw_user_meta_data->>'phone', ''),
-    'Subscribe'
+    'Demo'
   );
   return new;
 end;
