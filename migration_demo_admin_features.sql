@@ -1,13 +1,10 @@
 -- =====================================================
--- MIGRATION: Demo Account + Admin Account Management
--- Jalankan di Supabase Dashboard > SQL Editor
+-- MIGRATION: Demo Default Role + Admin Manage Accounts
+-- Jalankan SELURUH script ini di:
+-- Supabase Dashboard > SQL Editor > New Query > Run
 -- =====================================================
 
--- 1. Ubah default role baru menjadi 'Demo'
-ALTER TABLE profiles
-  ALTER COLUMN role SET DEFAULT 'Demo';
-
--- 2. Update trigger handle_new_user agar akun baru = Demo
+-- ── LANGKAH 1: Ubah trigger agar akun baru = Demo ───────────────────
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger AS $$
 BEGIN
@@ -16,39 +13,55 @@ BEGIN
     new.id,
     COALESCE(new.raw_user_meta_data->>'name', ''),
     COALESCE(new.raw_user_meta_data->>'phone', ''),
-    'Demo'  -- Akun baru selalu mulai sebagai Demo
-  );
+    'Demo'
+  )
+  ON CONFLICT (id) DO NOTHING;
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. RLS Policy: Admin bisa membaca SEMUA profiles
--- (Default Supabase hanya mengizinkan user membaca profile sendiri)
-DROP POLICY IF EXISTS "Admin can read all profiles" ON profiles;
-CREATE POLICY "Admin can read all profiles"
-  ON profiles FOR SELECT
-  USING (
-    auth.uid() = id  -- user baca profile sendiri
-    OR
-    EXISTS (          -- atau jika Admin, bisa baca semua
-      SELECT 1 FROM profiles p
-      WHERE p.id = auth.uid() AND p.role = 'Admin'
-    )
-  );
+-- ── LANGKAH 2: RLS — drop semua policy profiles lama, buat ulang ────
+-- (Supabase default hanya izinkan user baca profile sendiri)
 
--- 4. RLS Policy: Admin bisa update role pengguna lain
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Hapus policy lama jika ada
+DROP POLICY IF EXISTS "Users can view own profile."      ON profiles;
+DROP POLICY IF EXISTS "Users can update own profile."    ON profiles;
+DROP POLICY IF EXISTS "Users can insert own profile."    ON profiles;
+DROP POLICY IF EXISTS "Admin can read all profiles"      ON profiles;
 DROP POLICY IF EXISTS "Admin can update any profile role" ON profiles;
-CREATE POLICY "Admin can update any profile role"
-  ON profiles FOR UPDATE
-  USING (
-    auth.uid() = id  -- user update profile sendiri
-    OR
-    EXISTS (          -- atau Admin bisa update siapa saja
-      SELECT 1 FROM profiles p
-      WHERE p.id = auth.uid() AND p.role = 'Admin'
-    )
+DROP POLICY IF EXISTS "Enable read for users based on user_id" ON profiles;
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON profiles;
+DROP POLICY IF EXISTS "Enable update for users based on user_id" ON profiles;
+
+-- SELECT: user baca milik sendiri ATAU Admin baca semua
+CREATE POLICY "profiles_select_policy" ON profiles
+  FOR SELECT USING (
+    auth.uid() = id
+    OR (
+      SELECT role FROM profiles WHERE id = auth.uid()
+    ) = 'Admin'
   );
 
--- Selesai.
--- Setelah migrasi, set minimal 1 akun ke role 'Admin' secara manual:
--- UPDATE profiles SET role = 'Admin' WHERE id = '<uuid-user-admin>';
+-- INSERT: hanya trigger system (service_role) yang insert saat signup
+CREATE POLICY "profiles_insert_policy" ON profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- UPDATE: user update profil sendiri ATAU Admin update siapa saja
+CREATE POLICY "profiles_update_policy" ON profiles
+  FOR UPDATE USING (
+    auth.uid() = id
+    OR (
+      SELECT role FROM profiles WHERE id = auth.uid()
+    ) = 'Admin'
+  );
+
+-- ── LANGKAH 3: Set akun Admin pertama (ganti UUID di bawah) ──────────
+-- WAJIB dijalankan manual untuk akun yang ingin dijadikan Admin:
+-- UPDATE profiles SET role = 'Admin' WHERE id = 'GANTI-DENGAN-UUID-USER-ADMIN';
+
+-- ── VERIFIKASI: cek policy yang aktif ────────────────────────────────
+SELECT schemaname, tablename, policyname, cmd
+FROM pg_policies
+WHERE tablename = 'profiles';

@@ -16,15 +16,8 @@ export const authService = {
       options: { data: { name, phone } },
     });
     if (error) throw error;
-
-    // Akun baru otomatis mendapat role 'Demo'.
-    // Trigger handle_new_user membuat profile dengan role 'Subscribe' (default schema),
-    // lalu kita update ke 'Demo' setelah user ID tersedia.
-    if (data?.user?.id) {
-      // Tunggu sebentar agar trigger selesai membuat row profile terlebih dahulu
-      await new Promise(r => setTimeout(r, 800));
-      await supabase.from('profiles').update({ role: 'Demo' }).eq('id', data.user.id);
-    }
+    // Role 'Demo' di-set oleh trigger handle_new_user di Supabase (lihat migration SQL).
+    // Tidak perlu update di sini — akan bentrok dengan RLS dan menyebabkan 500 error.
     return data;
   },
 
@@ -565,7 +558,10 @@ export const adminService = {
       .from('profiles')
       .select('id, name, phone, role, created_at, login_streak, last_login_date')
       .order('created_at', { ascending: false });
-    if (error) throw error;
+    if (error) {
+      console.error('[adminService.getAllProfiles] RLS error:', error.message);
+      throw new Error(`Gagal ambil profiles: ${error.message}. Pastikan RLS policy sudah dijalankan dari migration SQL.`);
+    }
     return data || [];
   },
 

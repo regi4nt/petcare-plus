@@ -2605,7 +2605,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
         nama: profile?.name || '-',
         email: user?.email || '-',
         telepon: profile?.phone || '-',
-        role: profile?.role || 'Subscribe',
+        role: profile?.role || 'Demo',
         rentang_data: rangeLabel,
         tanggal_ekspor: new Date().toLocaleString('id-ID'),
       };
@@ -3166,7 +3166,7 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {[['Nama', profile?.name || '-'], ['Email', user?.email || '-'], ['Telepon', profile?.phone || '-'], ['Role', profile?.role || 'Subscribe']].map(([k, v]) => (
+                  {[['Nama', profile?.name || '-'], ['Email', user?.email || '-'], ['Telepon', profile?.phone || '-'], ['Role', profile?.role || '(belum dimuat)']].map(([k, v]) => (
                     <div key={k} className="flex justify-between py-2.5 border-b border-slate-50 last:border-0">
                       <span className="text-sm text-slate-500">{k}</span>
                       <span className="text-sm font-bold text-slate-800">{v}</span>
@@ -4768,7 +4768,7 @@ export default function App() {
           if (isNewUser) setTimeout(() => setShowPWAModal(true), 1500);
         }
         // Update streak harian (hanya Subscribe)
-        if (prof?.role === 'Subscribe' || !prof?.role) {
+        if (prof?.role === 'Subscribe' || prof?.role === 'Admin') {
           profileService.updateStreak(uid)
             .then(res => { if (res.changed) setStreak(res.streak); })
             .catch(() => {});
