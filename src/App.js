@@ -1295,16 +1295,18 @@ const getIotHealthTip = (score, iotCalc, petName) => {
   };
 };
 
-// ─── AI PROVIDERS CONFIG ───────────────────────────────────────────────
+// ─── AI PROVIDERS CONFIG (ENV-BASED) ─────────────────────────────────────
+// API Keys dibaca dari environment variable Vercel (REACT_APP_*)
+// Tidak ada input API key dari user — semua dikonfigurasi di Vercel dashboard
+
 const AI_PROVIDERS = [
   {
     id: 'openrouter',
     name: 'OpenRouter',
     color: 'from-violet-500 to-purple-600',
-    badge: 'bg-violet-50 text-violet-700',
-    placeholder: 'sk-or-v1-...',
+    envKey: process.env.REACT_APP_OPENROUTER_API_KEY,
     url: 'https://openrouter.ai/api/v1/chat/completions',
-    defaultModel: 'openai/gpt-4o-mini',
+    defaultModel: process.env.REACT_APP_OPENROUTER_MODEL || 'openai/gpt-4o-mini',
     getHeaders: (key) => ({ 'Authorization': `Bearer ${key}`, 'HTTP-Referer': window.location.href }),
     getBody: (model, messages) => ({ model, messages }),
   },
@@ -1312,10 +1314,9 @@ const AI_PROVIDERS = [
     id: 'openai',
     name: 'OpenAI',
     color: 'from-emerald-500 to-teal-600',
-    badge: 'bg-emerald-50 text-emerald-700',
-    placeholder: 'sk-...',
+    envKey: process.env.REACT_APP_OPENAI_API_KEY,
     url: 'https://api.openai.com/v1/chat/completions',
-    defaultModel: 'gpt-4o-mini',
+    defaultModel: process.env.REACT_APP_OPENAI_MODEL || 'gpt-4o-mini',
     getHeaders: (key) => ({ 'Authorization': `Bearer ${key}` }),
     getBody: (model, messages) => ({ model, messages }),
   },
@@ -1323,10 +1324,9 @@ const AI_PROVIDERS = [
     id: 'anthropic',
     name: 'Anthropic',
     color: 'from-orange-500 to-amber-600',
-    badge: 'bg-orange-50 text-orange-700',
-    placeholder: 'sk-ant-...',
+    envKey: process.env.REACT_APP_ANTHROPIC_API_KEY,
     url: 'https://api.anthropic.com/v1/messages',
-    defaultModel: 'claude-haiku-4-5-20251001',
+    defaultModel: process.env.REACT_APP_ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
     getHeaders: (key) => ({ 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }),
     getBody: (model, messages) => ({ model, max_tokens: 400, messages }),
     parseResponse: (data) => data.content?.[0]?.text || '',
@@ -1335,10 +1335,9 @@ const AI_PROVIDERS = [
     id: 'gemini',
     name: 'Gemini',
     color: 'from-blue-500 to-indigo-600',
-    badge: 'bg-blue-50 text-blue-700',
-    placeholder: 'AIza...',
+    envKey: process.env.REACT_APP_GEMINI_API_KEY,
     getUrl: (model, key) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    defaultModel: 'gemini-1.5-flash',
+    defaultModel: process.env.REACT_APP_GEMINI_MODEL || 'gemini-1.5-flash',
     getHeaders: () => ({}),
     getBody: (model, messages) => ({ contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })) }),
     parseResponse: (data) => data.candidates?.[0]?.content?.parts?.[0]?.text || '',
@@ -1347,10 +1346,9 @@ const AI_PROVIDERS = [
     id: 'deepseek',
     name: 'DeepSeek',
     color: 'from-sky-500 to-cyan-600',
-    badge: 'bg-sky-50 text-sky-700',
-    placeholder: 'sk-...',
+    envKey: process.env.REACT_APP_DEEPSEEK_API_KEY,
     url: 'https://api.deepseek.com/v1/chat/completions',
-    defaultModel: 'deepseek-chat',
+    defaultModel: process.env.REACT_APP_DEEPSEEK_MODEL || 'deepseek-chat',
     getHeaders: (key) => ({ 'Authorization': `Bearer ${key}` }),
     getBody: (model, messages) => ({ model, messages }),
   },
@@ -1358,10 +1356,9 @@ const AI_PROVIDERS = [
     id: 'groq',
     name: 'Groq',
     color: 'from-rose-500 to-pink-600',
-    badge: 'bg-rose-50 text-rose-700',
-    placeholder: 'gsk_...',
+    envKey: process.env.REACT_APP_GROQ_API_KEY,
     url: 'https://api.groq.com/openai/v1/chat/completions',
-    defaultModel: 'llama-3.1-8b-instant',
+    defaultModel: process.env.REACT_APP_GROQ_MODEL || 'llama-3.1-8b-instant',
     getHeaders: (key) => ({ 'Authorization': `Bearer ${key}` }),
     getBody: (model, messages) => ({ model, messages }),
   },
@@ -1369,118 +1366,30 @@ const AI_PROVIDERS = [
     id: 'grok',
     name: 'Grok (xAI)',
     color: 'from-slate-700 to-slate-900',
-    badge: 'bg-slate-100 text-slate-700',
-    placeholder: 'xai-...',
+    envKey: process.env.REACT_APP_GROK_API_KEY,
     url: 'https://api.x.ai/v1/chat/completions',
-    defaultModel: 'grok-3-mini',
+    defaultModel: process.env.REACT_APP_GROK_MODEL || 'grok-3-mini',
     getHeaders: (key) => ({ 'Authorization': `Bearer ${key}` }),
     getBody: (model, messages) => ({ model, messages }),
   },
 ];
 
-const getAiSettings = () => {
-  try { return JSON.parse(localStorage.getItem('petcare_ai_settings') || '{}'); } catch { return {}; }
-};
-const saveAiSettings = (s) => localStorage.setItem('petcare_ai_settings', JSON.stringify(s));
+// Pilih provider aktif: provider pertama yang punya env key terisi
+const getActiveProvider = () => AI_PROVIDERS.find(p => p.envKey && p.envKey.trim() !== '') || null;
 
-const callAiProvider = async (providerId, apiKey, model, messages) => {
-  const provider = AI_PROVIDERS.find(p => p.id === providerId);
-  if (!provider) throw new Error('Provider tidak ditemukan');
+const callAiProvider = async (provider, messages) => {
+  const apiKey = provider.envKey;
+  const model = provider.defaultModel;
   const url = provider.getUrl ? provider.getUrl(model, apiKey) : provider.url;
   const headers = { 'Content-Type': 'application/json', ...provider.getHeaders(apiKey) };
   const body = provider.getBody(model, messages);
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-  if (!res.ok) { const err = await res.text(); throw new Error(`${provider.name} error ${res.status}: ${err}`); }
+  if (!res.ok) { const err = await res.text(); throw new Error(`${provider.name} error ${res.status}: ${err.slice(0, 200)}`); }
   const data = await res.json();
   if (provider.parseResponse) return provider.parseResponse(data);
   return data.choices?.[0]?.message?.content || '';
 };
 
-// ─── AI SETTINGS MODAL ─────────────────────────────────────────────────
-const AiSettingsModal = ({ onClose, onSaved }) => {
-  const [settings, setSettings] = useState(getAiSettings);
-  const [activeProvider, setActiveProvider] = useState(settings.provider || 'openrouter');
-  const [showKey, setShowKey] = useState(false);
-
-  const provider = AI_PROVIDERS.find(p => p.id === activeProvider);
-  const currentKey = settings.keys?.[activeProvider] || '';
-  const currentModel = settings.models?.[activeProvider] || provider?.defaultModel || '';
-
-  const setKey = (val) => setSettings(s => ({ ...s, keys: { ...s.keys, [activeProvider]: val } }));
-  const setModel = (val) => setSettings(s => ({ ...s, models: { ...s.models, [activeProvider]: val } }));
-  const handleSave = () => { saveAiSettings({ ...settings, provider: activeProvider }); onSaved?.(); onClose(); };
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
-      <div className="bg-white rounded-[28px] w-full max-w-md shadow-2xl overflow-hidden">
-        <div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center"><Sparkles size={18} /></div>
-              <div>
-                <h3 className="font-black text-lg">AI Tips Harian</h3>
-                <p className="text-[11px] opacity-80">Konfigurasi API Key provider AI</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center hover:bg-white/30"><X size={16} /></button>
-          </div>
-        </div>
-
-        <div className="p-6 space-y-4">
-          {/* Provider chips */}
-          <div>
-            <label className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2 block">Pilih Provider</label>
-            <div className="flex flex-wrap gap-2">
-              {AI_PROVIDERS.map(p => (
-                <button key={p.id} onClick={() => setActiveProvider(p.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeProvider === p.id ? `bg-gradient-to-r ${p.color} text-white shadow-md` : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* API Key input */}
-          <div>
-            <label className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5 block">API Key — {provider?.name}</label>
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={currentKey}
-                onChange={e => setKey(e.target.value)}
-                placeholder={provider?.placeholder || 'Masukkan API Key...'}
-                className="w-full px-4 py-3 pr-12 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400"
-              />
-              <button onClick={() => setShowKey(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          {/* Model input */}
-          <div>
-            <label className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5 block">Model</label>
-            <input
-              type="text"
-              value={currentModel}
-              onChange={e => setModel(e.target.value)}
-              placeholder={provider?.defaultModel}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400"
-            />
-            <p className="text-[10px] text-slate-400 mt-1 ml-1">Default: {provider?.defaultModel}</p>
-          </div>
-
-          <p className="text-[10px] text-slate-400 bg-slate-50 rounded-xl p-3">🔒 API Key disimpan hanya di browser (localStorage) dan tidak dikirim ke server aplikasi.</p>
-
-          <div className="flex gap-3 pt-1">
-            <button onClick={onClose} className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-2xl font-bold text-sm hover:bg-slate-200">Batal</button>
-            <button onClick={handleSave} className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-2xl font-bold text-sm shadow-md hover:opacity-90">Simpan</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────
 const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records, onAlert, onUpdatePet, onDeletePet, streak = 0, profile }) => {
@@ -1505,15 +1414,9 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
   const [aiTip, setAiTip] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
-  const [showAiSettings, setShowAiSettings] = useState(false);
-
   const generateAiTip = async () => {
-    const settings = getAiSettings();
-    const providerId = settings.provider || 'openrouter';
-    const provider = AI_PROVIDERS.find(p => p.id === providerId);
-    const apiKey = settings.keys?.[providerId];
-    if (!apiKey) { setShowAiSettings(true); return; }
-    const model = settings.models?.[providerId] || provider?.defaultModel;
+    const provider = getActiveProvider();
+    if (!provider) { setAiError('Tidak ada API key AI yang dikonfigurasi di environment.'); return; }
     setAiLoading(true);
     setAiError(null);
     try {
@@ -1521,8 +1424,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
       const latestRecord = records?.filter(r => r.pet_id === selectedPet?.id)?.sort((a, b) => new Date(b.date) - new Date(a.date))?.[0];
       const recordInfo = latestRecord ? `Rekam medis terakhir: ${latestRecord.type} - ${latestRecord.notes || latestRecord.diagnosis || ''}` : '';
       const prompt = `Kamu adalah dokter hewan berpengalaman. Berikan satu tips perawatan harian yang spesifik, praktis, dan berguna untuk hari ini.\n\nData hewan:\n${petInfo}\n${recordInfo}\n\nBerikan tips dalam format JSON:\n{"title": "judul singkat (max 8 kata)", "body": "penjelasan praktis (2-3 kalimat)"}\n\nHanya balas dengan JSON, tanpa teks lain.`;
-      const messages = [{ role: 'user', content: prompt }];
-      let raw = await callAiProvider(providerId, apiKey, model, messages);
+      let raw = await callAiProvider(provider, [{ role: 'user', content: prompt }]);
       raw = raw.replace(/```json|```/g, '').trim();
       const parsed = JSON.parse(raw);
       setAiTip({ title: parsed.title, body: parsed.body });
@@ -2067,7 +1969,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             const badgeLabel = isAiActive ? '✨ Tips AI Hari Ini' : isIotAlert
               ? (isUrgent ? '🚨 Kondisi Darurat' : '⚠️ Perlu Perhatian')
               : isUrgent ? 'Segera Tindak' : isHigh ? 'Perhatian' : tip.priority ? 'Rekomendasi' : 'Tips Hari Ini';
-            const badgeSrc = isAiActive ? (getAiSettings().provider || 'openrouter') : isIotAlert ? 'Data IoT Realtime' : tip.priority ? 'Dari Rekam Medis' : selectedPet.species;
+            const badgeSrc = isAiActive ? (getActiveProvider()?.name || 'AI') : isIotAlert ? 'Data IoT Realtime' : tip.priority ? 'Dari Rekam Medis' : selectedPet.species;
             const displayTitle = isAiActive ? aiTip.title : tip.title;
             const displayBody = isAiActive ? aiTip.body : tip.body;
             return (
@@ -2108,11 +2010,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
                       {aiLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
                       {aiLoading ? 'Memuat...' : isAiActive ? 'Perbarui AI' : 'Tips AI'}
                     </button>
-                    <button
-                      onClick={() => setShowAiSettings(true)}
-                      className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all">
-                      <Key size={11} />API Key
-                    </button>
+
                     {isAiActive && (
                       <button
                         onClick={() => { setAiTip(null); setAiError(null); }}
@@ -2127,8 +2025,7 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
               </div>
             );
           })()}
-          {/* ── AI Settings Modal ── */}
-          {showAiSettings && <AiSettingsModal onClose={() => setShowAiSettings(false)} onSaved={() => {}} />}
+
         </div>
       </div>
 
@@ -2725,20 +2622,14 @@ const TipsPage = ({ selectedPet, records }) => {
   const [aiTip, setAiTip] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
-  const [showAiSettings, setShowAiSettings] = useState(false);
-
   const generateAiTip = async () => {
-    const settings = getAiSettings();
-    const providerId = settings.provider || 'openrouter';
-    const provider = AI_PROVIDERS.find(p => p.id === providerId);
-    const apiKey = settings.keys?.[providerId];
-    if (!apiKey) { setShowAiSettings(true); return; }
-    const model = settings.models?.[providerId] || provider?.defaultModel;
+    const provider = getActiveProvider();
+    if (!provider) { setAiError('Tidak ada API key AI yang dikonfigurasi di environment Vercel.'); return; }
     setAiLoading(true); setAiError(null);
     try {
       const petInfo = selectedPet ? `Nama: ${selectedPet.name}, Jenis: ${selectedPet.species}, Usia: ${selectedPet.age || '?'} ${selectedPet.age_unit || 'tahun'}, Berat: ${selectedPet.weight || '?'} kg` : `hewan jenis ${activeSpecies}`;
       const prompt = `Kamu adalah dokter hewan. Berikan 3 tips perawatan untuk ${petInfo}.\n\nFormat JSON array:\n[{"title":"judul singkat","body":"penjelasan 2 kalimat"},...]\n\nHanya JSON, tanpa teks lain.`;
-      let raw = await callAiProvider(providerId, apiKey, model, [{ role: 'user', content: prompt }]);
+      let raw = await callAiProvider(provider, [{ role: 'user', content: prompt }]);
       raw = raw.replace(/```json|```/g, '').trim();
       setAiTip(JSON.parse(raw));
     } catch (e) {
@@ -2756,21 +2647,17 @@ const TipsPage = ({ selectedPet, records }) => {
             {aiLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             {aiLoading ? 'Memuat AI...' : 'Generate AI Tips'}
           </button>
-          <button onClick={() => setShowAiSettings(true)}
-            className="flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-2 rounded-2xl text-xs font-bold hover:bg-slate-200 transition-all">
-            <Key size={13} />
-          </button>
+
         </div>
       </div>
       <p className="text-sm text-slate-500 mb-6">Panduan merawat hewan peliharaan dengan baik</p>
-      {showAiSettings && <AiSettingsModal onClose={() => setShowAiSettings(false)} onSaved={() => {}} />}
       {aiError && <div className="mb-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl">⚠️ {aiError}</div>}
       {aiTip && Array.isArray(aiTip) && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles size={15} className="text-violet-600" />
             <span className="text-sm font-black text-slate-800">Tips AI — {selectedPet?.name || activeSpecies}</span>
-            <span className="text-[10px] bg-violet-100 text-violet-700 font-bold px-2 py-0.5 rounded-full">{getAiSettings().provider || 'AI'}</span>
+            <span className="text-[10px] bg-violet-100 text-violet-700 font-bold px-2 py-0.5 rounded-full">{getActiveProvider()?.name || 'AI'}</span>
             <button onClick={() => setAiTip(null)} className="ml-auto text-slate-400 hover:text-slate-600"><X size={13} /></button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
