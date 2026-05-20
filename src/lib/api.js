@@ -284,7 +284,10 @@ export const monitoringService = {
       .from('monitoring')
       .select('*')
       .eq('pet_id', petId)
+      // created_at DESC → batch terbaru dulu
+      // reading_index DESC → dalam batch yang sama, baris terbaru (index 14) dulu
       .order('created_at', { ascending: false })
+      .order('reading_index', { ascending: false })
       .limit(limit);
     if (error) throw error;
     return data || [];
@@ -300,6 +303,7 @@ export const monitoringService = {
       .select('*')
       .eq('pet_id', petId)
       .order('created_at', { ascending: false })
+      .order('reading_index', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (error) throw error;

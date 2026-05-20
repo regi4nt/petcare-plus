@@ -6,6 +6,14 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
   const [lastUpdate, setLastUpdate] = useState(null);
   const [isLive, setIsLive] = useState(false);
   const [showHibernationModal, setShowHibernationModal] = useState(false);
+  const liveTimerRef = React.useRef(null);
+
+  // Nyalakan badge LIVE selama 8 detik setiap kali batch baru tiba
+  const triggerLive = useCallback(() => {
+    setIsLive(true);
+    if (liveTimerRef.current) clearTimeout(liveTimerRef.current);
+    liveTimerRef.current = setTimeout(() => setIsLive(false), 8000);
+  }, []);
 
   const fetchData = useCallback(async (petId) => {
     if (!petId) return;
@@ -55,10 +63,20 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
   useEffect(() => {
     if (!selectedPet?.id) return;
     fetchData(selectedPet.id);
+    // Debounce: batch upload mengirim 15 baris sekaligus → tunda 1.5 detik
+    // agar hanya 1 fetch yang terjadi, bukan 15 fetch berturut-turut
+    let debounceTimer = null;
     const channel = monitoringService.subscribe(selectedPet.id, () => {
-      fetchData(selectedPet.id);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchData(selectedPet.id);
+        triggerLive();
+      }, 1500);
     });
-    return () => { channel.unsubscribe(); };
+    return () => {
+      channel.unsubscribe();
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
   }, [selectedPet, fetchData]);
 
   const StatCard = ({ label, value, unit, icon: Icon, color, bg, status, statusColor }) => (
@@ -92,6 +110,16 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
 
   const batteryStatus = getBatteryStatus(latest?.battery_level, latest?.battery_status);
   const batteryPercent = latest?.battery_level ?? null;
+
+  // ── Status perangkat: hitung berdasarkan umur data terakhir ──────
+  // Deep Sleep: data masuk setiap 15 menit (batch), bukan real-time
+  const deviceStatus = React.useMemo(() => {
+    if (!latest?.created_at) return { label: '🔴 Menunggu', cls: 'bg-slate-500 text-slate-200', detail: 'Belum ada data dari ESP32' };
+    const ageMin = (Date.now() - new Date(latest.created_at).getTime()) / 60000;
+    if (ageMin < 20)  return { label: '🟢 Aktif',        cls: 'bg-emerald-400 text-white',   detail: `Data terbaru ${Math.round(ageMin)} mnt lalu` };
+    if (ageMin < 60)  return { label: '🟡 Tidur',         cls: 'bg-amber-400 text-white',     detail: `Deep Sleep — siklus berikutnya ~${Math.round(20 - (ageMin % 15))} mnt lagi` };
+    return              { label: '🔴 Offline',       cls: 'bg-rose-500 text-white',     detail: `Tidak ada data sejak ${Math.round(ageMin)} mnt lalu` };
+  }, [latest]);
 
   return (
     <div className="space-y-6">
@@ -143,9 +171,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
             </div>
             <p className={`text-xs font-semibold ${isKandang ? "text-amber-600" : "text-indigo-500"}`}>
               {modeSource === 'iot'
-                ? isKandang
-                  ? "IoT terdeteksi di kandang — kirim data tiap 5 detik"
-                  : "IoT terdeteksi bebas bergerak — kirim data tiap 15 detik"
+                ? "IoT aktif — baca sensor tiap 1 menit · batch upload tiap 15 menit"
                 : modeSource === 'species'
                 ? isKandang
                   ? `${selectedPet?.species} cenderung di kandang — menunggu konfirmasi IoT`
@@ -484,8 +510,8 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
                     Update: {lastUpdate.toLocaleTimeString("id-ID")}
                   </span>
                 )}
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${latest ? 'bg-emerald-400 text-white' : 'bg-slate-500 text-slate-200'}`}>
-                  {latest ? '🟢 Terhubung' : '🔴 Menunggu'}
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${deviceStatus.cls}`}>
+                  {deviceStatus.label}
                 </span>
               </div>
             </div>
@@ -496,11 +522,11 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
                   ["Device ID",      latest?.device_id ?? "—"],
                   ["Mode Aktif",     mode ? (isKandang ? "Kandang" : "Kalung") : "—"],
                   ["Sumber Mode",    modeSource === 'iot' ? "Dari ESP32" : modeSource === 'species' ? `Default (${selectedPet?.species})` : "—"],
-                  ["Interval Kirim", mode ? (isKandang ? "5 detik" : "15 detik") : "—"],
+                  ["Baca Sensor",    "Tiap 1 menit"],
+                  ["Batch Upload",   "Tiap 15 mnt (15 data)"],
                   ["Data Tersimpan", history.length + " rekaman"],
-                  ["Firmware",       "esp32_iot_monitoring v2.1"],
-                  ["Database",       "Supabase Realtime"],
-                  ["Protokol",       "HTTPS + Realtime WS"],
+                  ["Firmware",       "esp32_iot_monitoring v4.0"],
+                  ["Protokol",       "Deep Sleep + HTTPS Batch"],
                 ].map(([k, v]) => (
                   <div key={k} className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{k}</p>
@@ -516,7 +542,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
                   : 'bg-slate-100 border-slate-200 text-slate-500'
               }`}>
                 {latest
-                  ? <><Wifi size={14} /> Terhubung — Supabase Realtime aktif, data langsung dari ESP32</>
+                  ? <><Wifi size={14} /> {deviceStatus.detail} — Supabase Realtime aktif, batch masuk tiap 15 menit</>
                   : <><WifiOff size={14} /> Menunggu data dari ESP32. Pastikan PET_ID di firmware sudah diisi.</>
                 }
               </div>

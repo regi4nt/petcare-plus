@@ -1,59 +1,36 @@
 /*
   ============================================================
-  PetCare+ IoT Monitor — ESP32 Firmware v3.0
+  PetCare+ IoT Monitor — ESP32 Firmware v4.0
   ============================================================
+  Arsitektur Hemat Daya: Deep Sleep + Batch Upload
+  ─────────────────────────────────────────────────────────────
+  Siklus Bangun & Baca Sensor  : setiap 1 menit
+    • ESP32 bangun dari Deep Sleep (<3 detik)
+    • Baca semua sensor (MAX30102, MLX90614, MPU-6050)
+    • Simpan ke buffer RTC RAM (bertahan selama Deep Sleep)
+    • WiFi TETAP MATI → langsung tidur kembali
+
+  Siklus Pengiriman Batch       : setiap 15 menit (15 data)
+    • Setelah 15 data terkumpul di buffer RTC RAM
+    • Hidupkan WiFi → POST 1 request (array JSON 15 baris)
+    • Polling perintah (hibernate / resume / restart)
+    • Buffer dikosongkan → siklus mulai lagi
+  ─────────────────────────────────────────────────────────────
   Hardware:
     - ESP32 ESP-32S Dev Board (AIFRobotic)
     - MAX30102   : Heart Rate + SpO2  (I2C 0x57)
     - MLX90614   : Suhu Inframerah    (I2C 0x5A)
     - MPU-6050   : Akselerometer      (I2C 0x68)
-    - Reed Switch: Deteksi mode kandang/kalung
+    - Reed Switch: Mode kandang/kalung
     - LED 4-pin  : RGB indicator (common cathode)
-    - Li-Po 3.7V : Baterai via ADC
-    - TP4056     : Charging module (pin CHRG + STDBY)
+    - Li-Po 3.7V : via ADC GPIO 34
+    - TP4056     : Charging (CHRG GPIO35, STDBY GPIO32)
 
-  WIRING:
-  ┌─────────────────────────────────────────────────────┐
-  │ I2C Bus (shared MLX90614 + MPU-6050 + MAX30102)     │
-  │   SDA → GPIO 21                                     │
-  │   SCL → GPIO 22                                     │
-  │   VCC → 3.3V    GND → GND                          │
-  ├─────────────────────────────────────────────────────┤
-  │ Magnetic Reed Switch                                │
-  │   Pin 1 → GPIO 33 (INPUT_PULLUP)                   │
-  │   Pin 2 → GND                                      │
-  │   LOW = magnet menempel = mode kandang              │
-  ├─────────────────────────────────────────────────────┤
-  │ LED 4-pin RGB (Common Cathode)                      │
-  │   R → GPIO 27 (via resistor 220Ω)                  │
-  │   G → GPIO 14 (via resistor 220Ω)                  │
-  │   B → GPIO 12 (via resistor 220Ω)                  │
-  │   GND (common) → GND                               │
-  │                                                     │
-  │ Jika Common Anode: hubungkan common ke 3.3V,        │
-  │ ubah logika: HIGH=OFF, LOW=ON                       │
-  ├─────────────────────────────────────────────────────┤
-  │ Battery Li-Po 3.7V                                  │
-  │   BAT+ → [R1: 100kΩ] → GPIO 34 (ADC)              │
-  │                      → [R2: 100kΩ] → GND           │
-  │   (Voltage divider 1:1, max input ~2.1V = aman)    │
-  ├─────────────────────────────────────────────────────┤
-  │ TP4056 Charging Module                              │
-  │   CHRG  → GPIO 35 (INPUT_PULLUP, LOW = charging)  │
-  │   STDBY → GPIO 32 (INPUT_PULLUP, LOW = penuh)     │
-  │   (Opsional — bisa tidak disambung)                │
-  └─────────────────────────────────────────────────────┘
-
-  LIBRARY (install via Arduino Library Manager):
-    - SparkFun MAX3010x Pulse and Proximity Sensor (oleh SparkFun)
-    - Adafruit MLX90614                           (oleh Adafruit)
-    - MPU6050                                     (oleh Electronic Cats)
-    - ArduinoJson                                 (oleh Benoit Blanchon, v6/v7)
-
-  CATATAN MAX30102:
-    Library SparkFun MAX3010x mendukung MAX30102 dan MAX30105.
-    MAX30102 hanya punya Red + IR LED (tidak ada Green).
-    SpO2 dihitung dari rasio Red/IR menggunakan algoritma bawaan library.
+  LIBRARY (Arduino Library Manager):
+    - SparkFun MAX3010x Pulse and Proximity Sensor
+    - Adafruit MLX90614
+    - MPU6050 (by Electronic Cats)
+    - ArduinoJson (v6/v7)
   ============================================================
 */
 
@@ -61,14 +38,14 @@
 #include <HTTPClient.h>
 #include <Wire.h>
 #include <ArduinoJson.h>
+#include <esp_sleep.h>
+#include <esp_task_wdt.h>
 
 #include <Adafruit_MLX90614.h>
 #include <MPU6050.h>
-#include "MAX30105.h"         // SparkFun MAX3010x library (support MAX30102)
-#include "spo2_algorithm.h"   // Algoritma SpO2 bawaan SparkFun
-#include "heartRate.h"        // Algoritma BPM bawaan SparkFun
-
-#include <esp_task_wdt.h>
+#include "MAX30105.h"
+#include "spo2_algorithm.h"
+#include "heartRate.h"
 
 // ═══════════════════════════════════════════════════════════
 //  KONFIGURASI — WAJIB DIISI
@@ -89,64 +66,65 @@ const char* DEVICE_ID         = "esp32-01";
 
 #define SDA_PIN       21
 #define SCL_PIN       22
-
-#define REED_PIN      33    // Magnetic Reed Switch (INPUT_PULLUP)
-
-// LED 4-pin RGB — Common Cathode (HIGH = nyala)
-// Jika common ANODE: ganti semua HIGH↔LOW di fungsi setLED()
+#define REED_PIN      33    // Reed Switch (INPUT_PULLUP, LOW = kandang)
 #define LED_R         27
 #define LED_G         14
 #define LED_B         12
-
-// Battery ADC (input only pin, aman untuk ADC)
-#define BATTERY_PIN   34
-
-// TP4056 status pins (opsional)
-#define TP4056_CHRG   35    // LOW = sedang charging
-#define TP4056_STDBY  32    // LOW = baterai penuh
+#define BATTERY_PIN   34    // ADC (input only)
+#define TP4056_CHRG   35    // LOW = charging
+#define TP4056_STDBY  32    // LOW = penuh
 
 // ═══════════════════════════════════════════════════════════
-//  KONSTANTA
+//  KONSTANTA TIMING
 // ═══════════════════════════════════════════════════════════
 
-#define INTERVAL_KALUNG   15000   // 15 detik (mode collar)
-#define INTERVAL_KANDANG   5000   // 5 detik  (mode cage, intensif)
-#define INTERVAL_HIBERNATE 60000  // 60 detik (hemat daya)
-#define INTERVAL_CMD_POLL   5000  // 5 detik polling perintah web
-
-#define BATTERY_MIN_V     3.0f   // 0% discharge
-#define BATTERY_MAX_V     4.2f   // 100% full
-
-// MAX30102: jumlah sample untuk kalkulasi SpO2
-#define SPO2_SAMPLE_SIZE  100
-
-// Watchdog timeout 30 detik (cukup untuk HTTP request lambat)
-#define WDT_TIMEOUT_MS    30000
+#define SLEEP_DURATION_NORMAL_US   (60ULL * 1000000ULL)   // 1 menit
+#define SLEEP_DURATION_HIBERNATE_US (60ULL * 1000000ULL)  // 1 menit (skip sensor)
+#define BATCH_SIZE                 15    // Kirim setiap 15 pembacaan
+#define WDT_TIMEOUT_MS             30000 // 30 detik
 
 // ═══════════════════════════════════════════════════════════
-//  OBJEK SENSOR
+//  KONSTANTA BATERAI
+// ═══════════════════════════════════════════════════════════
+
+#define BATTERY_MIN_V   3.0f
+#define BATTERY_MAX_V   4.2f
+
+// ═══════════════════════════════════════════════════════════
+//  STRUCT SENSOR READING
+//  Disimpan di RTC RAM — bertahan selama Deep Sleep
+// ═══════════════════════════════════════════════════════════
+
+struct SensorReading {
+  float   suhu;
+  float   heart_rate;
+  float   spo2;
+  int16_t ax, ay, az;
+  float   battery_level;
+  char    battery_status[12];   // "full"|"charging"|"discharging"|"low"|"critical"
+  char    mode[8];              // "kalung" | "kandang"
+};
+
+// ═══════════════════════════════════════════════════════════
+//  RTC RAM — bertahan selama Deep Sleep
+// ═══════════════════════════════════════════════════════════
+
+RTC_DATA_ATTR int           readingCount    = 0;
+RTC_DATA_ATTR SensorReading buffer[BATCH_SIZE];
+RTC_DATA_ATTR bool          isHibernating   = false;
+RTC_DATA_ATTR uint32_t      hibernateCycles = 0;  // Sisa siklus tidur hibernasi
+RTC_DATA_ATTR int           failCount       = 0;  // Gagal kirim beruntun
+
+// ═══════════════════════════════════════════════════════════
+//  OBJEK SENSOR (di-init ulang setiap bangun)
 // ═══════════════════════════════════════════════════════════
 
 Adafruit_MLX90614 mlx;
 MPU6050           mpu;
-MAX30105          particleSensor;   // Library mendukung MAX30102
+MAX30105          particleSensor;
 
-// ═══════════════════════════════════════════════════════════
-//  STATE GLOBAL
-// ═══════════════════════════════════════════════════════════
-
-bool isCageMode    = false;
-bool isHibernating = false;
-bool isCharging    = false;
-bool isBattFull    = false;
-
-unsigned long lastSendTime    = 0;
-unsigned long lastCmdPollTime = 0;
-unsigned long hibernateEnd    = 0;
-
-int  failCount = 0;
-
-// Buffer MAX30102 untuk SpO2 algorithm
+// ─── SpO2 algorithm buffer ───────────────────────────────
+#define SPO2_SAMPLE_SIZE 100
 uint32_t irBuffer[SPO2_SAMPLE_SIZE];
 uint32_t redBuffer[SPO2_SAMPLE_SIZE];
 int32_t  spo2Value     = 0;
@@ -154,57 +132,32 @@ int8_t   spo2Valid     = 0;
 int32_t  heartRateCalc = 0;
 int8_t   hrValid       = 0;
 
-// HR ring buffer untuk smoothing BPM
+// ─── HR ring buffer ──────────────────────────────────────
 #define BPM_BUFFER_SIZE 4
 float bpmBuffer[BPM_BUFFER_SIZE] = {0};
 int   bpmIdx  = 0;
 long  lastBeat = 0;
 
 // ═══════════════════════════════════════════════════════════
-//  STRUCT
-// ═══════════════════════════════════════════════════════════
-
-struct BatteryInfo {
-  float  level;    // 0–100 %
-  String status;   // "full" | "charging" | "discharging" | "low" | "critical"
-};
-
-// ═══════════════════════════════════════════════════════════
-//  LED RGB HELPER
-//  Warna encode status:
-//    Hijau         = normal / kalung
-//    Biru          = mode kandang
-//    Merah         = error / gagal kirim
-//    Cyan (G+B)    = charging
-//    Putih (R+G+B) = connecting WiFi
-//    Kuning (R+G)  = baterai rendah
-//    Magenta (R+B) = baterai kritis / hibernasi
-//    Semua mati    = idle / deep sleep
+//  LED HELPER
 // ═══════════════════════════════════════════════════════════
 
 void setLED(bool r, bool g, bool b) {
-  // Common Cathode: HIGH = nyala
-  // Jika common Anode: ganti HIGH → LOW dan sebaliknya
   digitalWrite(LED_R, r ? HIGH : LOW);
   digitalWrite(LED_G, g ? HIGH : LOW);
   digitalWrite(LED_B, b ? HIGH : LOW);
 }
+void ledOff()     { setLED(0,0,0); }
+void ledGreen()   { setLED(0,1,0); }
+void ledBlue()    { setLED(0,0,1); }
+void ledRed()     { setLED(1,0,0); }
+void ledCyan()    { setLED(0,1,1); }
+void ledYellow()  { setLED(1,1,0); }
+void ledMagenta() { setLED(1,0,1); }
+void ledWhite()   { setLED(1,1,1); }
 
-void ledOff()         { setLED(0,0,0); }
-void ledGreen()       { setLED(0,1,0); }   // kalung normal
-void ledBlue()        { setLED(0,0,1); }   // kandang
-void ledRed()         { setLED(1,0,0); }   // error
-void ledCyan()        { setLED(0,1,1); }   // charging
-void ledYellow()      { setLED(1,1,0); }   // baterai rendah
-void ledMagenta()     { setLED(1,0,1); }   // kritis / hibernasi
-void ledWhite()       { setLED(1,1,1); }   // connecting
-
-// Kedip sekali (non-blocking versi cepat)
 void ledBlink(bool r, bool g, bool b, int ms = 120) {
-  setLED(r, g, b);
-  delay(ms);
-  ledOff();
-  delay(ms);
+  setLED(r,g,b); delay(ms); ledOff(); delay(ms);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -223,243 +176,227 @@ void setupWatchdog() {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  WiFi
+//  INISIALISASI SENSOR
 // ═══════════════════════════════════════════════════════════
 
-void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
+bool initSensors() {
+  Wire.begin(SDA_PIN, SCL_PIN);
+  bool ok = true;
 
-  Serial.printf("[WiFi] Menghubungkan ke \"%s\"", WIFI_SSID);
-  ledWhite();
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  int t = 0;
-  while (WiFi.status() != WL_CONNECTED && t < 24) {
-    delay(500);
-    esp_task_wdt_reset();
-    Serial.print(".");
-    t++;
+  if (!mlx.begin()) {
+    Serial.println("[WARN] MLX90614 tidak terdeteksi.");
+    ok = false;
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\n[WiFi] Terhubung ✓ IP: %s\n", WiFi.localIP().toString().c_str());
-    ledBlink(0,1,0, 100); ledBlink(0,1,0, 100);  // kedip hijau 2x = connected
-    failCount = 0;
+  mpu.initialize();
+  if (!mpu.testConnection()) {
+    Serial.println("[WARN] MPU-6050 tidak terdeteksi.");
+    ok = false;
+  }
+
+  if (!particleSensor.begin(Wire, I2C_SPEED_STANDARD)) {
+    Serial.println("[WARN] MAX30102 tidak terdeteksi.");
+    ok = false;
   } else {
-    Serial.println("\n[WiFi] Gagal.");
-    ledBlink(1,0,0, 200);
+    particleSensor.setup(
+      60,   // LED brightness
+      4,    // sample average
+      2,    // mode: Red + IR (SpO2)
+      100,  // sample rate
+      411,  // pulse width µs
+      4096  // ADC range
+    );
+    particleSensor.setPulseAmplitudeRed(60);
+    particleSensor.setPulseAmplitudeIR(60);
   }
+
+  return ok;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  SENSOR: MLX90614 — Suhu
+//  BACA SUHU
 // ═══════════════════════════════════════════════════════════
 
 float bacaSuhu() {
   float s = mlx.readObjectTempC();
-  if (isnan(s) || s < 10.0f || s > 50.0f) {
-    Serial.println("[WARN] Suhu MLX90614 tidak valid, pakai 38.5°C");
-    return 38.5f;
-  }
+  if (isnan(s) || s < 10.0f || s > 50.0f) return 38.5f;
   return roundf(s * 100.0f) / 100.0f;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  SENSOR: MAX30102 — Heart Rate real-time (interrupt-free)
-//  Membaca ~4 sample baru per panggilan, deteksi beat, rata-rata BPM
+//  BACA HEART RATE
+//  Baca ~2 detik worth of sample untuk mendapatkan beat
 // ═══════════════════════════════════════════════════════════
 
 float bacaHeartRate() {
-  // Baca beberapa sample baru yang tersedia di FIFO MAX30102
-  // (FIFO punya buffer ~32 sample, aman dipanggil tiap loop)
-  byte nSamples = particleSensor.available();
-  if (nSamples == 0) {
-    particleSensor.check();   // Minta sensor isi ulang FIFO
-    nSamples = particleSensor.available();
-  }
+  // Warm-up: baca 200 sample (2 detik pada 100 sample/s)
+  unsigned long deadline = millis() + 2500;
+  while (millis() < deadline) {
+    esp_task_wdt_reset();
+    byte avail = particleSensor.available();
+    if (avail == 0) { particleSensor.check(); continue; }
 
-  float bpm = 0;
-  for (byte i = 0; i < nSamples; i++) {
-    long ir = particleSensor.getIR();
-    particleSensor.nextSample();
+    for (byte i = 0; i < avail; i++) {
+      long ir = particleSensor.getIR();
+      particleSensor.nextSample();
+      if (ir < 50000) continue;  // Tidak ada jari
 
-    // Jika IR < threshold, jari tidak terpasang
-    if (ir < 50000) continue;
-
-    if (checkForBeat(ir)) {
-      long now   = millis();
-      long delta = now - lastBeat;
-      lastBeat   = now;
-
-      if (delta > 300 && delta < 2000) {    // filter 30–200 BPM
-        float newBpm = 60000.0f / (float)delta;
-        // Masukkan ke ring buffer
-        bpmBuffer[bpmIdx % BPM_BUFFER_SIZE] = newBpm;
-        bpmIdx++;
+      if (checkForBeat(ir)) {
+        long now   = millis();
+        long delta = now - lastBeat;
+        lastBeat   = now;
+        if (delta > 300 && delta < 2000) {
+          bpmBuffer[bpmIdx % BPM_BUFFER_SIZE] = 60000.0f / (float)delta;
+          bpmIdx++;
+        }
       }
     }
   }
 
-  // Rata-rata dari ring buffer (abaikan nilai 0)
   float sum = 0; int cnt = 0;
   for (int i = 0; i < BPM_BUFFER_SIZE; i++) {
     if (bpmBuffer[i] > 0) { sum += bpmBuffer[i]; cnt++; }
   }
+  // Reset buffer untuk wakeup berikutnya (RTC RAM tidak menyimpan bpmBuffer)
+  memset(bpmBuffer, 0, sizeof(bpmBuffer));
+  bpmIdx   = 0;
+  lastBeat = 0;
 
-  if (cnt > 0) bpm = sum / cnt;
-  if (bpm < 30 || bpm > 220) bpm = 0;   // 0 = tidak valid / jari tidak ada
-
+  float bpm = cnt > 0 ? sum / cnt : 0;
+  if (bpm < 30 || bpm > 220) bpm = 0;
   return roundf(bpm * 10.0f) / 10.0f;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  SENSOR: MAX30102 — SpO2
-//  Menggunakan SparkFun spo2_algorithm (sampling blok 100 data)
-//  Dipanggil lebih jarang (hanya saat interval kirim tiba)
+//  BACA SpO2
 // ═══════════════════════════════════════════════════════════
 
 float bacaSpO2() {
-  Serial.print("[SpO2] Mengambil 100 sample...");
-
-  // Kumpulkan 100 sample Red + IR
+  Serial.print("[SpO2] Sampling 100 data...");
   for (int i = 0; i < SPO2_SAMPLE_SIZE; i++) {
-    // Tunggu data baru tersedia
-    while (!particleSensor.available()) {
-      particleSensor.check();
-    }
+    while (!particleSensor.available()) particleSensor.check();
     redBuffer[i] = particleSensor.getRed();
     irBuffer[i]  = particleSensor.getIR();
     particleSensor.nextSample();
-
-    if (i % 25 == 0) {
-      esp_task_wdt_reset();   // Reset watchdog saat loop panjang
-      Serial.print(".");
-    }
+    if (i % 25 == 0) { esp_task_wdt_reset(); Serial.print("."); }
   }
-
-  // Jalankan algoritma SpO2 SparkFun
   maxim_heart_rate_and_oxygen_saturation(
     irBuffer, SPO2_SAMPLE_SIZE, redBuffer,
     &spo2Value, &spo2Valid, &heartRateCalc, &hrValid
   );
-
-  Serial.printf(" selesai. SpO2: %d (%s)\n",
-    spo2Value, spo2Valid ? "valid" : "tidak valid");
-
-  if (!spo2Valid || spo2Value < 70 || spo2Value > 100) {
-    return 0;   // 0 = tidak ada jari / tidak valid
-  }
-
+  Serial.printf(" %d (%s)\n", spo2Value, spo2Valid ? "valid" : "tidak valid");
+  if (!spo2Valid || spo2Value < 70 || spo2Value > 100) return 0;
   return (float)spo2Value;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  SENSOR: Baterai (ADC + TP4056)
+//  BACA BATERAI
 // ═══════════════════════════════════════════════════════════
 
-BatteryInfo bacaBaterai() {
-  // Rata-rata 16 sample ADC untuk stabilitas
+struct BatteryResult { float level; const char* status; };
+
+BatteryResult bacaBaterai() {
   long rawSum = 0;
-  for (int i = 0; i < 16; i++) {
-    rawSum += analogRead(BATTERY_PIN);
-    delay(1);
-  }
-  float raw = rawSum / 16.0f;
+  for (int i = 0; i < 16; i++) { rawSum += analogRead(BATTERY_PIN); delay(1); }
+  float voltage = ((rawSum / 16.0f) / 4095.0f) * 3.3f * 2.0f;
+  float level   = constrain(
+    ((voltage - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V)) * 100.0f,
+    0.0f, 100.0f
+  );
 
-  // ADC 12-bit, 3.3V ref, voltage divider 1:1 (×2)
-  float voltage = (raw / 4095.0f) * 3.3f * 2.0f;
+  bool chrg  = (digitalRead(TP4056_CHRG)  == LOW);
+  bool stdby = (digitalRead(TP4056_STDBY) == LOW);
 
-  float level = ((voltage - BATTERY_MIN_V) / (BATTERY_MAX_V - BATTERY_MIN_V)) * 100.0f;
-  level = constrain(level, 0.0f, 100.0f);
+  const char* status;
+  if      (stdby || level >= 95.0f) status = "full";
+  else if (chrg)                    status = "charging";
+  else if (level > 20.0f)           status = "discharging";
+  else if (level > 10.0f)           status = "low";
+  else                              status = "critical";
 
-  // Baca status TP4056
-  bool chrg  = (digitalRead(TP4056_CHRG)  == LOW);  // LOW = charging
-  bool stdby = (digitalRead(TP4056_STDBY) == LOW);  // LOW = full/standby
-
-  isCharging = chrg;
-  isBattFull = stdby;
-
-  // Tentukan status string
-  String status;
-  if      (stdby || level >= 95.0f)                status = "full";
-  else if (chrg)                                    status = "charging";
-  else if (level > (float)20)                       status = "discharging";
-  else if (level > (float)10)                       status = "low";
-  else                                              status = "critical";
-
-  Serial.printf("[Batt] Raw:%.0f | %.2fV | %.1f%% | %s | CHRG:%s STDBY:%s\n",
-    raw, voltage, level, status.c_str(),
-    chrg ? "YES" : "no", stdby ? "YES" : "no");
-
+  Serial.printf("[Batt] %.2fV | %.1f%% | %s\n", voltage, level, status);
   return { level, status };
 }
 
 // ═══════════════════════════════════════════════════════════
-//  UPDATE LED berdasarkan state
+//  WiFi
 // ═══════════════════════════════════════════════════════════
 
-void updateLED(const BatteryInfo& batt) {
-  if (isHibernating) {
-    ledMagenta();                    // Ungu = hibernasi
-    return;
+bool connectWiFi() {
+  ledWhite();
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.printf("[WiFi] Menghubungkan ke \"%s\"", WIFI_SSID);
+
+  int t = 0;
+  while (WiFi.status() != WL_CONNECTED && t < 24) {
+    delay(500); esp_task_wdt_reset(); Serial.print("."); t++;
   }
-  if (batt.status == "critical") {
-    // Kedip merah-mati cepat (non-blocking: alternating tiap loop)
-    static bool blink = false;
-    blink = !blink;
-    blink ? ledRed() : ledOff();
-    return;
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\n[WiFi] Terhubung ✓ IP: %s\n",
+      WiFi.localIP().toString().c_str());
+    ledBlink(0,1,0,100); ledBlink(0,1,0,100);
+    failCount = 0;
+    return true;
   }
-  if (batt.status == "low") {
-    ledYellow();                     // Kuning = baterai rendah
-    return;
-  }
-  if (batt.status == "charging") {
-    ledCyan();                       // Cyan = sedang charge
-    return;
-  }
-  if (batt.status == "full") {
-    ledBlink(0,1,0, 80);             // Kedip hijau singkat = full
-    return;
-  }
-  // Normal → sesuai mode
-  isCageMode ? ledBlue() : ledGreen();
+
+  Serial.println("\n[WiFi] Gagal terhubung.");
+  ledBlink(1,0,0,200);
+  return false;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  KIRIM DATA KE SUPABASE
+//  BATCH UPLOAD KE SUPABASE
+//  Mengirim buffer[] sebagai JSON array dalam 1 HTTP POST
 // ═══════════════════════════════════════════════════════════
 
-bool kirimData(float suhu, float hr, float spo2,
-               int16_t ax, int16_t ay, int16_t az,
-               const BatteryInfo& batt) {
+bool batchUpload() {
+  // ── Generate batch_id: UUID v4 sederhana dari esp_random() ──────
+  // Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+  uint32_t r1 = esp_random(), r2 = esp_random(),
+           r3 = esp_random(), r4 = esp_random();
+  char batchId[37];
+  snprintf(batchId, sizeof(batchId),
+    "%08x-%04x-4%03x-%04x-%04x%08x",
+    r1,
+    (r2 >> 16) & 0xFFFF,
+    (r2 & 0x0FFF),
+    (0x8000 | ((r3 >> 16) & 0x3FFF)),
+    r3 & 0xFFFF,
+    r4
+  );
 
-  if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
-    if (WiFi.status() != WL_CONNECTED) return false;
+  // Hitung ukuran dokumen: 15 objek × ~250 byte + overhead
+  DynamicJsonDocument doc(15 * 300);
+  JsonArray arr = doc.to<JsonArray>();
+
+  for (int i = 0; i < readingCount; i++) {
+    JsonObject obj = arr.createNestedObject();
+    obj["pet_id"]         = PET_ID;
+    obj["device_id"]      = DEVICE_ID;
+    obj["batch_id"]       = batchId;        // Semua baris dalam batch punya UUID sama
+    obj["reading_index"]  = i;              // 0 = paling lama, 14 = paling baru
+    obj["mode"]           = buffer[i].mode;
+    obj["suhu"]           = buffer[i].suhu;
+    obj["heart_rate"]     = buffer[i].heart_rate;
+    obj["spo2"]           = buffer[i].spo2;
+    obj["ax"]             = buffer[i].ax;
+    obj["ay"]             = buffer[i].ay;
+    obj["az"]             = buffer[i].az;
+    obj["battery_level"]  = roundf(buffer[i].battery_level * 100.0f) / 100.0f;
+    obj["battery_status"] = buffer[i].battery_status;
   }
-
-  // JSON payload — sesuai skema tabel monitoring
-  StaticJsonDocument<512> doc;
-  doc["pet_id"]         = PET_ID;
-  doc["device_id"]      = DEVICE_ID;
-  doc["mode"]           = isCageMode ? "kandang" : "kalung";
-  doc["suhu"]           = suhu;
-  doc["heart_rate"]     = hr;
-  doc["spo2"]           = spo2;
-  doc["ax"]             = ax;
-  doc["ay"]             = ay;
-  doc["az"]             = az;
-  doc["battery_level"]  = roundf(batt.level * 100.0f) / 100.0f;  // ✓ field benar
-  doc["battery_status"] = batt.status;                            // ✓ field benar
 
   String json;
   serializeJson(doc, json);
 
+  Serial.printf("[Supabase] Mengirim %d baris data...\n", readingCount);
+  Serial.printf("[Supabase] Payload: %d bytes\n", json.length());
+
   HTTPClient http;
   http.begin(String(SUPABASE_URL) + "/rest/v1/monitoring");
-  http.setTimeout(8000);
+  http.setTimeout(12000);
   http.addHeader("Content-Type",  "application/json");
   http.addHeader("apikey",        SUPABASE_ANON_KEY);
   http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
@@ -469,34 +406,35 @@ bool kirimData(float suhu, float hr, float spo2,
   http.end();
 
   if (code == 200 || code == 201) {
-    Serial.printf("[Supabase] Terkirim ✓ HTTP %d\n", code);
+    Serial.printf("[Supabase] Batch sukses ✓ HTTP %d (%d baris)\n",
+      code, readingCount);
     failCount = 0;
-    ledBlink(0,1,0, 60);   // Kedip hijau singkat = sukses kirim
+    // Kosongkan buffer
+    readingCount = 0;
+    ledBlink(0,1,0,80); ledBlink(0,1,0,80);
     return true;
   }
 
   failCount++;
-  Serial.printf("[Supabase] Gagal HTTP %d | fail#%d\n", code, failCount);
-  ledBlink(1,0,0, 80);
+  Serial.printf("[Supabase] Gagal HTTP %d | fail#%d — data disimpan\n",
+    code, failCount);
+  ledBlink(1,0,0,100);
 
-  if (failCount >= 5) {
-    Serial.println("[WiFi] Reset karena terlalu banyak gagal...");
-    WiFi.disconnect();
-    delay(1000);
-    connectWiFi();
-    failCount = 0;
+  // Jika gagal 3x berturut, kosongkan buffer agar tidak stuck
+  if (failCount >= 3) {
+    Serial.println("[Supabase] 3x gagal — buffer dikosongkan.");
+    readingCount = 0;
+    failCount    = 0;
   }
   return false;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  UPDATE STATUS COMMAND DI SUPABASE (PATCH)
+//  UPDATE STATUS COMMAND
 // ═══════════════════════════════════════════════════════════
 
 void updateCommandStatus(const String& cmdId, const String& status,
                          const String& errMsg = "") {
-  if (WiFi.status() != WL_CONNECTED) return;
-
   StaticJsonDocument<192> doc;
   doc["status"] = status;
   if (errMsg.length() > 0) doc["error_message"] = errMsg;
@@ -518,17 +456,14 @@ void updateCommandStatus(const String& cmdId, const String& status,
 
   int code = http.PATCH(json);
   http.end();
-
-  Serial.printf("[CMD] Status '%s' → PATCH HTTP %d\n", status.c_str(), code);
+  Serial.printf("[CMD] Status '%s' → HTTP %d\n", status.c_str(), code);
 }
 
 // ═══════════════════════════════════════════════════════════
-//  POLLING PERINTAH DARI WEB (device_commands)
+//  POLLING PERINTAH (hanya saat WiFi sudah aktif = tiap 15 menit)
 // ═══════════════════════════════════════════════════════════
 
 void checkAndExecuteCommands() {
-  if (WiFi.status() != WL_CONNECTED) return;
-
   HTTPClient http;
   String url = String(SUPABASE_URL)
              + "/rest/v1/device_commands"
@@ -557,54 +492,63 @@ void checkAndExecuteCommands() {
   String     command = cmd["command"] | "";
   if (cmdId.length() == 0) return;
 
-  Serial.printf("[CMD] Terima: %s (id: ...%s)\n",
-    command.c_str(), cmdId.substring(cmdId.length()-6).c_str());
+  Serial.printf("[CMD] Terima: \"%s\"\n", command.c_str());
 
-  // ── Eksekusi ──────────────────────────────────────────────
   if (command == "hibernate") {
-    int durMin = 30;
-    if (cmd.containsKey("payload") && !cmd["payload"].isNull()) {
-      durMin = cmd["payload"]["duration_minutes"] | 30;
-    }
-    durMin        = constrain(durMin, 1, 480);
-    isHibernating = true;
-    hibernateEnd  = millis() + (unsigned long)durMin * 60000UL;
-    Serial.printf("[Hibernasi] Aktif %d menit. Auto-resume pukul +%d detik\n",
-      durMin, durMin * 60);
+    int durMin = cmd.containsKey("payload") && !cmd["payload"].isNull()
+                 ? (int)(cmd["payload"]["duration_minutes"] | 30)
+                 : 30;
+    durMin          = constrain(durMin, 1, 480);
+    // Konversi menit → jumlah siklus 1-menit
+    hibernateCycles = (uint32_t)durMin;
+    isHibernating   = true;
+    Serial.printf("[Hibernasi] Aktif %d menit (%d siklus).\n",
+      durMin, hibernateCycles);
     updateCommandStatus(cmdId, "executed");
 
   } else if (command == "resume") {
-    isHibernating = false;
-    hibernateEnd  = 0;
+    isHibernating   = false;
+    hibernateCycles = 0;
     Serial.println("[Hibernasi] Resume — sensor aktif kembali.");
     updateCommandStatus(cmdId, "executed");
 
   } else if (command == "restart") {
-    Serial.println("[CMD] Restart ESP32...");
     updateCommandStatus(cmdId, "executed");
-    delay(800);
+    delay(500);
     ESP.restart();
 
   } else {
-    Serial.printf("[CMD] Perintah tidak dikenal: %s\n", command.c_str());
     updateCommandStatus(cmdId, "error", "Unknown command: " + command);
   }
 }
 
 // ═══════════════════════════════════════════════════════════
-//  SETUP
+//  MASUK DEEP SLEEP
+// ═══════════════════════════════════════════════════════════
+
+void goToSleep(uint64_t duration_us) {
+  ledOff();
+  particleSensor.shutDown();      // Matikan MAX30102 sebelum tidur
+  WiFi.mode(WIFI_OFF);            // Pastikan WiFi mati
+  Wire.end();
+
+  Serial.printf("[Sleep] Tidur %.0f detik. Buffer: %d/%d\n",
+    duration_us / 1e6, readingCount, BATCH_SIZE);
+  Serial.flush();
+
+  esp_sleep_enable_timer_wakeup(duration_us);
+  esp_deep_sleep_start();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SETUP — Dijalankan setiap bangun dari Deep Sleep
 // ═══════════════════════════════════════════════════════════
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(200);
 
-  Serial.println("\n╔════════════════════════════════════╗");
-  Serial.println("║  PetCare+ ESP32 Firmware v3.0      ║");
-  Serial.println("║  MAX30102 + MLX90614 + MPU6050     ║");
-  Serial.println("╚════════════════════════════════════╝");
-
-  // ── Pin setup ──────────────────────────────────────────
+  // ── Pin setup ───────────────────────────────────────────
   pinMode(REED_PIN,    INPUT_PULLUP);
   pinMode(LED_R,       OUTPUT);
   pinMode(LED_G,       OUTPUT);
@@ -612,139 +556,133 @@ void setup() {
   pinMode(BATTERY_PIN, INPUT);
   pinMode(TP4056_CHRG, INPUT_PULLUP);
   pinMode(TP4056_STDBY,INPUT_PULLUP);
-
   analogReadResolution(12);
-  analogSetAttenuation(ADC_11db);   // Full scale ~3.3V
+  analogSetAttenuation(ADC_11db);
 
-  // LED test — semua warna satu per satu
-  ledRed();     delay(200);
-  ledGreen();   delay(200);
-  ledBlue();    delay(200);
-  ledWhite();   delay(300);
-  ledOff();
-
-  // ── I2C ────────────────────────────────────────────────
-  Wire.begin(SDA_PIN, SCL_PIN);
-
-  // ── MLX90614 ───────────────────────────────────────────
-  if (!mlx.begin()) {
-    Serial.println("[ERROR] MLX90614 tidak terdeteksi!");
-    ledBlink(1,0,0, 500); ledBlink(1,0,0, 500);
-  } else {
-    Serial.println("[OK]   MLX90614 siap");
-  }
-
-  // ── MPU-6050 ───────────────────────────────────────────
-  mpu.initialize();
-  if (!mpu.testConnection()) {
-    Serial.println("[ERROR] MPU-6050 tidak terdeteksi!");
-    ledBlink(1,0,0, 500);
-  } else {
-    Serial.println("[OK]   MPU-6050 siap");
-  }
-
-  // ── MAX30102 ───────────────────────────────────────────
-  // MAX30102 alamat I2C 0x57 — library SparkFun MAX3010x
-  if (!particleSensor.begin(Wire, I2C_SPEED_STANDARD)) {
-    Serial.println("[ERROR] MAX30102 tidak terdeteksi! Cek kabel SDA/SCL.");
-    ledBlink(1,0,0, 500); ledBlink(1,0,0, 500);
-  } else {
-    Serial.println("[OK]   MAX30102 siap");
-
-    // Konfigurasi MAX30102 untuk HR + SpO2
-    byte ledBrightness = 60;    // 0=off, 255=max (mulai sedang)
-    byte sampleAvg     = 4;     // sample average 4 (1,2,4,8,16,32)
-    byte ledMode       = 2;     // 1=Red only, 2=Red+IR (SpO2 mode)
-    byte sampleRate    = 100;   // samples/sec: 50,100,200,400,800,1000,1600,3200
-    int  pulseWidth    = 411;   // pulse width µs: 69,118,215,411
-    int  adcRange      = 4096;  // ADC full scale: 2048,4096,8192,16384
-
-    particleSensor.setup(ledBrightness, sampleAvg, ledMode,
-                         sampleRate, pulseWidth, adcRange);
-    particleSensor.setPulseAmplitudeRed(ledBrightness);
-    particleSensor.setPulseAmplitudeIR(ledBrightness);
-    particleSensor.enableDIETEMPRDY();   // Enable die temperature (opsional)
-  }
-
-  // ── Watchdog ───────────────────────────────────────────
   setupWatchdog();
 
-  // ── WiFi ───────────────────────────────────────────────
-  connectWiFi();
+  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  bool isFirstBoot = (cause != ESP_SLEEP_WAKEUP_TIMER);
 
-  Serial.println("[INFO] Setup selesai. Monitoring dimulai.\n");
+  if (isFirstBoot) {
+    // LED test saat pertama kali menyala
+    Serial.println("\n╔════════════════════════════════════╗");
+    Serial.println("║  PetCare+ ESP32 Firmware v4.0      ║");
+    Serial.println("║  Deep Sleep + Batch Upload Mode    ║");
+    Serial.println("╚════════════════════════════════════╝");
+    ledRed();   delay(200); ledGreen(); delay(200);
+    ledBlue();  delay(200); ledWhite(); delay(300);
+    ledOff();
+
+    // Reset state di RTC RAM
+    readingCount    = 0;
+    isHibernating   = false;
+    hibernateCycles = 0;
+    failCount       = 0;
+  }
+
+  // ── Cek mode hibernasi ──────────────────────────────────
+  if (isHibernating) {
+    if (hibernateCycles > 0) {
+      hibernateCycles--;
+      Serial.printf("[Hibernasi] Sisa %d siklus. Skip sensor.\n",
+        hibernateCycles);
+      ledMagenta(); delay(100);
+      goToSleep(SLEEP_DURATION_HIBERNATE_US);
+      return; // Tidak pernah tercapai
+    } else {
+      // Hibernasi selesai
+      isHibernating = false;
+      Serial.println("[Hibernasi] Selesai — resume monitoring.");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  FASE BACA SENSOR (WiFi MATI)
+  // ═══════════════════════════════════════════════════════
+
+  bool cageMode = (digitalRead(REED_PIN) == LOW);
+  cageMode ? ledBlue() : ledGreen();
+
+  bool sensorsOk = initSensors();
+  esp_task_wdt_reset();
+
+  // Baca semua sensor
+  float suhu = sensorsOk ? bacaSuhu()       : 38.5f;
+  float hr   = sensorsOk ? bacaHeartRate()  : 0.0f;
+  float spo2 = sensorsOk ? bacaSpO2()       : 0.0f;
+  esp_task_wdt_reset();
+
+  int16_t ax = 0, ay = 0, az = 0;
+  if (sensorsOk) mpu.getAcceleration(&ax, &ay, &az);
+
+  BatteryResult batt = bacaBaterai();
+  esp_task_wdt_reset();
+
+  // ── Simpan ke buffer RTC RAM ────────────────────────────
+  if (readingCount < BATCH_SIZE) {
+    SensorReading& r = buffer[readingCount];
+    r.suhu         = suhu;
+    r.heart_rate   = hr;
+    r.spo2         = spo2;
+    r.ax           = ax;
+    r.ay           = ay;
+    r.az           = az;
+    r.battery_level = batt.level;
+    strncpy(r.battery_status, batt.status, sizeof(r.battery_status) - 1);
+    strncpy(r.mode, cageMode ? "kandang" : "kalung", sizeof(r.mode) - 1);
+    r.battery_status[sizeof(r.battery_status) - 1] = '\0';
+    r.mode[sizeof(r.mode) - 1] = '\0';
+    readingCount++;
+  }
+
+  // Print ringkasan ke Serial Monitor
+  Serial.println("────────────────────────────────────────");
+  Serial.printf("Mode     : %s | Buffer: %d/%d\n",
+    cageMode ? "KANDANG 🏠" : "KALUNG 🐾", readingCount, BATCH_SIZE);
+  Serial.printf("Suhu     : %.2f°C\n", suhu);
+  Serial.printf("HR       : %.1f BPM%s\n", hr, hr == 0 ? " (tidak ada)" : "");
+  Serial.printf("SpO2     : %.0f%%%s\n",   spo2, spo2 == 0 ? " (tidak valid)" : "");
+  Serial.printf("Accel    : X=%-5d Y=%-5d Z=%d\n", ax, ay, az);
+  Serial.printf("Baterai  : %.1f%% | %s\n", batt.level, batt.status);
+
+  // ═══════════════════════════════════════════════════════
+  //  CEK APAKAH SUDAH WAKTUNYA BATCH UPLOAD
+  // ═══════════════════════════════════════════════════════
+
+  if (readingCount >= BATCH_SIZE) {
+    Serial.println("\n[Batch] Buffer penuh — mulai upload...");
+
+    if (connectWiFi()) {
+      esp_task_wdt_reset();
+
+      // 1. Upload batch data
+      batchUpload();
+      esp_task_wdt_reset();
+
+      // 2. Polling perintah dari web (hibernate, resume, restart)
+      checkAndExecuteCommands();
+      esp_task_wdt_reset();
+
+      // 3. Putuskan WiFi untuk hemat daya
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+    } else {
+      // Gagal connect: readingCount tetap, coba lagi 15 menit ke depan
+      // Namun agar buffer tidak overflow, reset jika sudah terlalu penuh
+      Serial.println("[WiFi] Gagal — data tetap di buffer, coba siklus berikutnya.");
+    }
+  }
+
+  // ── Masuk Deep Sleep ────────────────────────────────────
+  goToSleep(SLEEP_DURATION_NORMAL_US);
 }
 
 // ═══════════════════════════════════════════════════════════
-//  LOOP UTAMA
+//  LOOP — Tidak pernah tercapai (deep sleep dari setup())
 // ═══════════════════════════════════════════════════════════
 
 void loop() {
-  esp_task_wdt_reset();   // Reset watchdog di setiap iterasi loop
-
-  unsigned long now = millis();
-
-  // ── 1. Auto-resume hibernasi ──────────────────────────
-  if (isHibernating && hibernateEnd > 0 && now >= hibernateEnd) {
-    isHibernating = false;
-    hibernateEnd  = 0;
-    Serial.println("[Hibernasi] Waktu habis — auto resume ✓");
-  }
-
-  // ── 2. Polling command dari web ───────────────────────
-  if (now - lastCmdPollTime >= INTERVAL_CMD_POLL) {
-    lastCmdPollTime = now;
-    checkAndExecuteCommands();
-    esp_task_wdt_reset();
-  }
-
-  // ── 3. Baca reed switch (mode kandang/kalung) ─────────
-  isCageMode = (digitalRead(REED_PIN) == LOW);
-
-  // ── 4. Baca baterai & update LED ──────────────────────
-  BatteryInfo batt = bacaBaterai();
-  updateLED(batt);
-
-  // ── 5. Kirim data sesuai interval ─────────────────────
-  unsigned long interval;
-  if      (isHibernating) interval = INTERVAL_HIBERNATE;
-  else if (isCageMode)    interval = INTERVAL_KANDANG;
-  else                    interval = INTERVAL_KALUNG;
-
-  if (now - lastSendTime >= interval) {
-    lastSendTime = now;
-
-    // Baca semua sensor
-    float   suhu = bacaSuhu();
-    float   hr   = bacaHeartRate();
-    float   spo2 = bacaSpO2();       // Blok ~1 detik untuk 100 sample
-    int16_t ax, ay, az;
-    mpu.getAcceleration(&ax, &ay, &az);
-
-    esp_task_wdt_reset();   // Reset watchdog setelah bacaSpO2() yang lama
-
-    // Print Serial Monitor
-    Serial.println("════════════════════════════════════════");
-    Serial.printf("Mode     : %s\n",        isCageMode   ? "KANDANG 🏠" : "KALUNG 🐾");
-    Serial.printf("Hibernasi: %s\n",        isHibernating ? "AKTIF 💤"   : "Tidak");
-    Serial.printf("Suhu     : %.2f°C\n",    suhu);
-    Serial.printf("HR       : %.1f BPM%s\n", hr, hr==0?" (jari tidak ada)":"");
-    Serial.printf("SpO2     : %.0f%%%s\n",   spo2, spo2==0?" (tidak valid)":"");
-    Serial.printf("Accel    : X=%-5d Y=%-5d Z=%d\n", ax, ay, az);
-    Serial.printf("Baterai  : %.1f%% | %s | Charging:%s | Full:%s\n",
-      batt.level, batt.status.c_str(),
-      isCharging?"YES":"no", isBattFull?"YES":"no");
-
-    // Kirim ke Supabase
-    bool ok = kirimData(suhu, hr, spo2, ax, ay, az, batt);
-
-    if (!ok) {
-      Serial.println("[WARN] Data tidak terkirim kali ini.");
-    }
-
-    esp_task_wdt_reset();
-  }
-
-  // Loop delay pendek agar HR, LED blink, command poll tetap responsif
-  delay(100);
+  // Tidak digunakan. Semua logika ada di setup() karena
+  // ESP32 selalu boot ulang setelah deep sleep.
 }

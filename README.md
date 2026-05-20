@@ -1,46 +1,69 @@
-# PetCare+ Web App
+# PetCare+ IoT Monitor
 
-Aplikasi monitoring kesehatan hewan peliharaan berbasis IoT.
+Sistem pemantauan kesehatan hewan peliharaan berbasis ESP32 + Supabase.
 
-## Versi
+## Firmware v4.0 — Deep Sleep + Batch Upload
 
-**Web App**: v3.0 — disesuaikan dengan firmware ESP32 v3.0
+### Pembagian Waktu Operasional
 
-## Hardware ESP32 (Firmware v3.0)
+| Fase | Interval | WiFi |
+|------|----------|------|
+| Bangun & Baca Sensor | Setiap 1 menit | ❌ Mati |
+| Batch Upload ke Supabase | Setiap 15 menit (15 data) | ✅ Nyala |
+
+**Siklus Bangun & Membaca Sensor (tiap 1 menit):**
+1. ESP32 bangun dari Deep Sleep (<3 detik)
+2. Baca semua sensor: suhu (MLX90614), detak jantung + SpO2 (MAX30102), gerak (MPU-6050), baterai
+3. Simpan ke buffer RTC RAM (bertahan selama Deep Sleep)
+4. WiFi tetap mati → langsung tidur kembali
+
+**Siklus Pengiriman Batch (tiap 15 menit):**
+1. Setelah 15 data terkumpul, hidupkan WiFi
+2. Kirim 15 baris sekaligus dalam 1 HTTP POST (JSON array)
+3. Polling perintah dari web (hibernate / resume / restart)
+4. Buffer dikosongkan → WiFi dimatikan → siklus ulang
+
+### Hardware
 
 - ESP32 ESP-32S Dev Board
-- **MAX30102** — Heart Rate + SpO₂ (I2C 0x57)
+- MAX30102 — Heart Rate + SpO2 (I2C 0x57)
 - MLX90614 — Suhu Inframerah (I2C 0x5A)
 - MPU-6050 — Akselerometer (I2C 0x68)
-- Reed Switch — Deteksi mode kandang/kalung
-- LED RGB 4-pin (Common Cathode)
-- Li-Po 3.7V + TP4056 Charging Module
+- Reed Switch — Mode kandang/kalung (GPIO 33)
+- LED RGB 4-pin (GPIO 27, 14, 12)
+- Li-Po 3.7V + TP4056
 
-## Perubahan v3.0
-
-### Web App
-- ✅ `generateDemoMonitoring`: tambah `battery_level`, `battery_status`, `device_id`; mode `'kalung'`/`'kandang'` (bukan `'normal'`)
-- ✅ `HibernationControl.jsx`: status `'failed'` → `'error'` sesuai constraint SQL
-- ✅ `api.js getCalculated`: select + return field `battery_level`, `battery_status`
-- ✅ `fetchAllIot` Demo mode: sertakan `latest_battery_level`, `latest_battery_status`, `avg_battery_level`
-- ✅ `MonitorPage.jsx`: terima prop `profile`; fetchData dengan Demo mode simulasi baterai
-
-### Firmware ESP32
-- MAX30102 (SpO₂ + HR) menggantikan MAX30100
-- LED RGB 4-pin (R/G/B) menggantikan LED tunggal
-- Battery monitoring via ADC + TP4056 CHRG/STDBY pins
-- Kirim field: `battery_level`, `battery_status`
-- Command polling: hibernate / resume / restart
-
-## Setup
-
-1. Jalankan `SYNC_DATABASE_FIX.sql` di Supabase SQL Editor
-2. Flash `esp32/esp32_iot_monitoring.ino` ke ESP32
-3. `npm install && npm start`
-
-## Library Arduino (v3.0)
+### Library Arduino
 
 - SparkFun MAX3010x Pulse and Proximity Sensor
 - Adafruit MLX90614
 - MPU6050 (Electronic Cats)
 - ArduinoJson (v6/v7)
+
+### Wiring
+
+```
+I2C Bus: SDA → GPIO 21, SCL → GPIO 22
+Reed Switch: GPIO 33 (INPUT_PULLUP)
+LED: R=GPIO27, G=GPIO14, B=GPIO12 (via 220Ω)
+Battery ADC: GPIO 34
+TP4056: CHRG=GPIO35, STDBY=GPIO32
+```
+
+### Setup Web App
+
+```bash
+cp .env.example .env
+# Isi REACT_APP_SUPABASE_URL dan REACT_APP_SUPABASE_ANON_KEY
+npm install
+npm start
+```
+
+### Database
+
+Jalankan file SQL di Supabase SQL Editor sesuai urutan:
+1. `supabase_schema.sql`
+2. `device_commands_migration.sql`
+3. `role_migration.sql`
+4. `streak_migration.sql`
+5. `SYNC_DATABASE_FIX.sql` (jika ada masalah sinkronisasi)
