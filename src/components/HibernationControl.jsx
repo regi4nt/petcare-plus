@@ -12,7 +12,7 @@ const StatusBadge = ({ status }) => {
   const map = {
     pending:  { label: '⏳ Tertunda',  cls: 'bg-amber-100 text-amber-700' },
     executed: { label: '✓ Berhasil',   cls: 'bg-emerald-100 text-emerald-700' },
-    failed:   { label: '✗ Gagal',      cls: 'bg-rose-100 text-rose-700' },
+    error:    { label: '✗ Gagal',      cls: 'bg-rose-100 text-rose-700' },
   };
   const s = map[status] || { label: status, cls: 'bg-slate-100 text-slate-600' };
   return (
@@ -78,11 +78,11 @@ export const HibernationControlModal = ({
       setHistory(rows);
       const lastCmd = rows[0];
       if (lastCmd) {
-        if (lastCmd.command === 'hibernate' && lastCmd.status !== 'failed') {
+        if (lastCmd.command === 'hibernate' && lastCmd.status !== 'error') {
           const sentAt  = new Date(lastCmd.created_at).getTime();
           const durMs   = (lastCmd.payload?.duration_minutes || 30) * 60 * 1000;
           const stillOn = (Date.now() - sentAt) < durMs;
-          setIsHibernating(stillOn && lastCmd.status !== 'failed');
+          setIsHibernating(stillOn && lastCmd.status !== 'error');
         } else if (['resume', 'restart'].includes(lastCmd.command)) {
           setIsHibernating(false);
         }

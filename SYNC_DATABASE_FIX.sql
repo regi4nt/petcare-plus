@@ -1,294 +1,206 @@
--- =====================================================================
--- PETCARE+ — SINKRONISASI DATABASE LENGKAP
--- Jalankan SATU FILE INI di: Supabase Dashboard → SQL Editor → Run
--- File ini aman dijalankan berulang kali (idempotent).
--- =====================================================================
+-- ================================================================
+-- PetCare+ Supabase Migration v3.0
+-- Untuk firmware ESP32 v3.0 (MAX30102 + TP4056 + RGB LED)
+-- 
+-- Jalankan di: Supabase Dashboard → SQL Editor → New Query → Run
+-- Aman dijalankan berulang (semua pakai IF NOT EXISTS / OR REPLACE)
+-- ================================================================
 
--- ─── LANGKAH 1: Extension UUID ───────────────────────────────────────
-create extension if not exists "uuid-ossp";
 
--- ─── LANGKAH 2: Tabel PROFILES (+ kolom streak jika belum ada) ───────
-create table if not exists profiles (
-  id               uuid references auth.users on delete cascade primary key,
-  name             text not null default '',
-  phone            text default '',
-  role             text default 'Demo' check (role in ('Subscribe', 'Demo', 'Admin')),
-  created_at       timestamptz default now(),
-  updated_at       timestamptz default now()
-);
+-- ================================================================
+-- [1] TABEL monitoring — Tambah kolom battery (jika belum ada)
+-- ================================================================
+-- Kolom battery_level dan battery_status mungkin BELUM ada
+-- jika migration battery sebelumnya belum dijalankan.
 
--- Kolom streak (dibutuhkan oleh api.js → profileService.updateStreak)
-alter table profiles
-  add column if not exists login_streak     integer not null default 0,
-  add column if not exists last_login_date  date;
+ALTER TABLE monitoring
+  ADD COLUMN IF NOT EXISTS battery_level  numeric(5,2)                  DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS battery_status text        NOT NULL           DEFAULT 'unknown';
 
--- Pastikan constraint role sudah benar (drop dulu jika beda)
-alter table profiles drop constraint if exists profiles_role_check;
-alter table profiles
-  add constraint profiles_role_check
-  check (role in ('Subscribe', 'Demo', 'Admin'));
+-- Pastikan constraint nilai battery_status valid
+ALTER TABLE monitoring
+  DROP CONSTRAINT IF EXISTS monitoring_battery_status_check;
 
--- Default role = Demo (sesuai handle_new_user terbaru)
-alter table profiles alter column role set default 'Demo';
+ALTER TABLE monitoring
+  ADD CONSTRAINT monitoring_battery_status_check
+  CHECK (battery_status IN ('full','charging','discharging','low','critical','unknown'));
 
--- ─── LANGKAH 3: Tabel PETS ───────────────────────────────────────────
-create table if not exists pets (
-  id         uuid default uuid_generate_v4() primary key,
-  user_id    uuid references auth.users on delete cascade not null,
-  name       text not null,
-  species    text not null default 'Kucing',
-  breed      text not null default '',
-  age        text default '1',
-  weight     text default '1',
-  gender     text default 'Jantan',
-  color      text default '',
-  notes      text default '',
-  created_at timestamptz default now()
-);
+COMMENT ON COLUMN monitoring.battery_level  IS 'Level baterai Li-Po (0–100%), diukur via ADC voltage divider';
+COMMENT ON COLUMN monitoring.battery_status IS 'Status baterai: full | charging | discharging | low | critical | unknown';
 
--- ─── LANGKAH 4: Tabel SCHEDULES ──────────────────────────────────────
-create table if not exists schedules (
-  id         uuid default uuid_generate_v4() primary key,
-  user_id    uuid references auth.users on delete cascade not null,
-  pet_id     uuid references pets on delete cascade not null,
-  type       text not null default 'Makan',
-  title      text not null,
-  date       date not null,
-  time       time not null default '08:00',
-  notes      text default '',
-  done       boolean default false,
-  created_at timestamptz default now()
-);
 
--- ─── LANGKAH 5: Tabel MEDICAL_RECORDS ────────────────────────────────
-create table if not exists medical_records (
-  id         uuid default uuid_generate_v4() primary key,
-  user_id    uuid references auth.users on delete cascade not null,
-  pet_id     uuid references pets on delete cascade not null,
-  date       date not null,
-  type       text not null default 'Pemeriksaan',
-  title      text not null,
-  doctor     text default '',
-  clinic     text default '',
-  weight     text default '',
-  temp       text default '',
-  notes      text default '',
-  next_visit date,
-  created_at timestamptz default now()
-);
-
--- ─── LANGKAH 6: Tabel NOTIFICATIONS ──────────────────────────────────
-create table if not exists notifications (
-  id         uuid default uuid_generate_v4() primary key,
-  user_id    uuid references auth.users on delete cascade not null,
-  pet_id     uuid references pets on delete set null,
-  text       text not null,
-  type       text default 'info',
-  unread     boolean default true,
-  created_at timestamptz default now()
-);
-
--- ─── LANGKAH 7: Tabel MONITORING (IoT + kolom battery) ───────────────
-create table if not exists monitoring (
-  id             uuid default uuid_generate_v4() primary key,
-  pet_id         uuid references pets on delete cascade,
-  device_id      text default 'esp32-01',
-  mode           text default 'kalung',
-  suhu           numeric(5,2),
-  heart_rate     numeric(6,2),
-  spo2           numeric(5,2),
-  ax             integer,
-  ay             integer,
-  az             integer,
-  created_at     timestamptz default now()
-);
-
--- Kolom battery (dibutuhkan MonitorPage.jsx)
-alter table monitoring
-  add column if not exists battery_level  numeric(5,2),
-  add column if not exists battery_status text default 'unknown';
-
--- Index monitoring
-create index if not exists monitoring_pet_id_idx    on monitoring(pet_id, created_at desc);
-create index if not exists monitoring_created_at_idx on monitoring(created_at desc);
-create index if not exists monitoring_battery_level_idx on monitoring(battery_level);
-
--- ─── LANGKAH 8: Tabel DEVICE_COMMANDS (hibernasi ESP32) ──────────────
-create table if not exists device_commands (
-  id            uuid default uuid_generate_v4() primary key,
-  pet_id        uuid references pets on delete cascade,
-  device_id     text not null,
-  command       text not null,     -- 'hibernate' | 'resume' | 'restart'
-  status        text default 'pending',  -- 'pending' | 'executed' | 'failed'
-  payload       jsonb default '{}',
-  created_at    timestamptz default now(),
+-- ================================================================
+-- [2] TABEL device_commands — Buat jika belum ada
+-- ================================================================
+CREATE TABLE IF NOT EXISTS device_commands (
+  id            uuid        DEFAULT uuid_generate_v4() PRIMARY KEY,
+  pet_id        uuid        REFERENCES pets(id) ON DELETE CASCADE,
+  device_id     text        NOT NULL,
+  command       text        NOT NULL,          -- 'hibernate' | 'resume' | 'restart'
+  status        text        NOT NULL DEFAULT 'pending',
+  payload       jsonb       NOT NULL DEFAULT '{}',
+  created_at    timestamptz NOT NULL DEFAULT now(),
   executed_at   timestamptz,
   error_message text
 );
 
-create index if not exists device_commands_device_id_idx on device_commands(device_id, created_at desc);
-create index if not exists device_commands_pet_id_idx    on device_commands(pet_id);
-create index if not exists device_commands_status_idx    on device_commands(status);
+-- Constraint nilai status yang valid
+ALTER TABLE device_commands
+  DROP CONSTRAINT IF EXISTS device_commands_status_check;
 
--- ─── LANGKAH 9: Fungsi & Trigger updated_at ──────────────────────────
-create or replace function update_updated_at()
-returns trigger as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$ language plpgsql;
+ALTER TABLE device_commands
+  ADD CONSTRAINT device_commands_status_check
+  CHECK (status IN ('pending','executed','error'));
 
-drop trigger if exists profiles_updated_at on profiles;
-create trigger profiles_updated_at
-  before update on profiles
-  for each row execute function update_updated_at();
+-- Constraint nilai command yang valid
+ALTER TABLE device_commands
+  DROP CONSTRAINT IF EXISTS device_commands_command_check;
 
--- ─── LANGKAH 10: Fungsi handle_new_user (trigger signup) ─────────────
--- Default role = Demo, ON CONFLICT aman untuk re-run
-create or replace function handle_new_user()
-returns trigger as $$
-begin
-  insert into profiles (id, name, phone, role)
-  values (
-    new.id,
-    coalesce(new.raw_user_meta_data->>'name', ''),
-    coalesce(new.raw_user_meta_data->>'phone', ''),
-    'Demo'
-  )
-  on conflict (id) do nothing;
-  return new;
-end;
-$$ language plpgsql security definer;
+ALTER TABLE device_commands
+  ADD CONSTRAINT device_commands_command_check
+  CHECK (command IN ('hibernate','resume','restart'));
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function handle_new_user();
+COMMENT ON TABLE  device_commands           IS 'Perintah dari web ke ESP32 (hibernasi, resume, restart)';
+COMMENT ON COLUMN device_commands.command   IS 'hibernate | resume | restart';
+COMMENT ON COLUMN device_commands.status    IS 'pending = belum dieksekusi, executed = berhasil, error = gagal';
+COMMENT ON COLUMN device_commands.payload   IS 'Config tambahan, contoh: {"duration_minutes": 30}';
 
--- ─── LANGKAH 11: Row Level Security ──────────────────────────────────
-alter table profiles       enable row level security;
-alter table pets           enable row level security;
-alter table schedules      enable row level security;
-alter table medical_records enable row level security;
-alter table notifications  enable row level security;
-alter table monitoring     enable row level security;
-alter table device_commands enable row level security;
+-- Index performa
+CREATE INDEX IF NOT EXISTS device_commands_device_pending_idx
+  ON device_commands(device_id, status, created_at DESC);
 
--- ── Bersihkan semua policy profiles lama ─────────────────────────────
-drop policy if exists "profiles: own"                         on profiles;
-drop policy if exists "Users can view own profile."           on profiles;
-drop policy if exists "Users can update own profile."         on profiles;
-drop policy if exists "Users can insert own profile."         on profiles;
-drop policy if exists "Admin can read all profiles"           on profiles;
-drop policy if exists "Admin can update any profile role"     on profiles;
-drop policy if exists "Enable read for users based on user_id" on profiles;
-drop policy if exists "Enable insert for authenticated users only" on profiles;
-drop policy if exists "Enable update for users based on user_id"   on profiles;
-drop policy if exists "profiles_select_policy"               on profiles;
-drop policy if exists "profiles_insert_policy"               on profiles;
-drop policy if exists "profiles_update_policy"               on profiles;
+CREATE INDEX IF NOT EXISTS device_commands_pet_id_idx
+  ON device_commands(pet_id, created_at DESC);
 
--- SELECT: user baca milik sendiri ATAU Admin baca semua
-create policy "profiles_select_policy" on profiles
-  for select using (
-    auth.uid() = id
-    or (select role from profiles where id = auth.uid()) = 'Admin'
+
+-- ================================================================
+-- [3] RLS — device_commands
+-- ================================================================
+ALTER TABLE device_commands ENABLE ROW LEVEL SECURITY;
+
+-- Hapus policy lama agar tidak bentrok
+DROP POLICY IF EXISTS "device_commands: insert own pets"  ON device_commands;
+DROP POLICY IF EXISTS "device_commands: select own pets"  ON device_commands;
+DROP POLICY IF EXISTS "device_commands: update anon"      ON device_commands;
+DROP POLICY IF EXISTS "device_commands: update own"       ON device_commands;
+
+-- INSERT: hanya user yang punya pet itu
+CREATE POLICY "device_commands: insert own pets"
+  ON device_commands FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    pet_id IN (SELECT id FROM pets WHERE user_id = auth.uid())
   );
 
--- INSERT: trigger signup (service_role) yang insert
-create policy "profiles_insert_policy" on profiles
-  for insert with check (auth.uid() = id);
-
--- UPDATE: user update profil sendiri ATAU Admin update siapa saja
-create policy "profiles_update_policy" on profiles
-  for update using (
-    auth.uid() = id
-    or (select role from profiles where id = auth.uid()) = 'Admin'
+-- SELECT: hanya user yang punya pet itu
+CREATE POLICY "device_commands: select own pets"
+  ON device_commands FOR SELECT
+  TO authenticated
+  USING (
+    pet_id IN (SELECT id FROM pets WHERE user_id = auth.uid())
   );
 
--- ── Policies tabel lain ───────────────────────────────────────────────
-drop policy if exists "pets: own" on pets;
-create policy "pets: own" on pets
-  for all using (auth.uid() = user_id);
+-- UPDATE (PATCH status): ESP32 pakai anon key untuk update status executed/error
+-- Dibatasi hanya kolom status, executed_at, error_message
+CREATE POLICY "device_commands: update anon"
+  ON device_commands FOR UPDATE
+  TO anon, authenticated
+  USING (true)
+  WITH CHECK (true);
 
-drop policy if exists "schedules: own" on schedules;
-create policy "schedules: own" on schedules
-  for all using (auth.uid() = user_id);
 
-drop policy if exists "medical_records: own" on medical_records;
-create policy "medical_records: own" on medical_records
-  for all using (auth.uid() = user_id);
+-- ================================================================
+-- [4] RLS — monitoring (pastikan anon bisa INSERT dari ESP32)
+-- ================================================================
+-- Hapus policy lama agar tidak duplikat
+DROP POLICY IF EXISTS "monitoring: insert anon"       ON monitoring;
+DROP POLICY IF EXISTS "monitoring: select own pets"   ON monitoring;
+DROP POLICY IF EXISTS "monitoring: delete own pets"   ON monitoring;
 
-drop policy if exists "notifications: own" on notifications;
-create policy "notifications: own" on notifications
-  for all using (auth.uid() = user_id);
+-- INSERT: siapa saja termasuk ESP32 (anon key)
+CREATE POLICY "monitoring: insert anon"
+  ON monitoring FOR INSERT
+  TO anon, authenticated
+  WITH CHECK (true);
 
--- Monitoring: ESP32 insert tanpa login, user baca pet miliknya
-drop policy if exists "monitoring: insert anon" on monitoring;
-create policy "monitoring: insert anon"
-  on monitoring for insert
-  to anon, authenticated
-  with check (true);
-
-drop policy if exists "monitoring: select own pets" on monitoring;
-create policy "monitoring: select own pets"
-  on monitoring for select
-  to authenticated
-  using (
-    pet_id is null
-    or pet_id in (select id from pets where user_id = auth.uid())
+-- SELECT: hanya user yang punya pet tersebut
+CREATE POLICY "monitoring: select own pets"
+  ON monitoring FOR SELECT
+  TO authenticated
+  USING (
+    pet_id IS NULL
+    OR pet_id IN (SELECT id FROM pets WHERE user_id = auth.uid())
   );
 
-drop policy if exists "monitoring: delete own pets" on monitoring;
-create policy "monitoring: delete own pets"
-  on monitoring for delete
-  to authenticated
-  using (
-    pet_id in (select id from pets where user_id = auth.uid())
+-- DELETE: user bisa hapus data monitoring pet miliknya
+CREATE POLICY "monitoring: delete own pets"
+  ON monitoring FOR DELETE
+  TO authenticated
+  USING (
+    pet_id IN (SELECT id FROM pets WHERE user_id = auth.uid())
   );
 
--- Device commands: user hanya untuk pet miliknya
-drop policy if exists "device_commands: insert own pets" on device_commands;
-create policy "device_commands: insert own pets"
-  on device_commands for insert
-  to authenticated
-  with check (
-    pet_id in (select id from pets where user_id = auth.uid())
-  );
 
-drop policy if exists "device_commands: select own pets" on device_commands;
-create policy "device_commands: select own pets"
-  on device_commands for select
-  to authenticated
-  using (
-    pet_id in (select id from pets where user_id = auth.uid())
-  );
+-- ================================================================
+-- [5] REALTIME — aktifkan untuk monitoring + device_commands
+-- ================================================================
+-- monitoring sudah ditambah di schema awal, ini pastikan
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE monitoring;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE device_commands;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+END $$;
 
--- ─── LANGKAH 12: Realtime ────────────────────────────────────────────
--- (Abaikan error "already member" — itu normal jika sudah aktif)
-alter publication supabase_realtime add table monitoring;
-alter publication supabase_realtime add table device_commands;
 
--- ─── LANGKAH 13: Migrasi data existing (role lama 'Basic' → 'Subscribe') ──
-update profiles
-set role = 'Subscribe'
-where role = 'Basic' or role is null;
+-- ================================================================
+-- [6] INDEX TAMBAHAN monitoring untuk query dashboard
+-- ================================================================
+CREATE INDEX IF NOT EXISTS monitoring_pet_created_idx
+  ON monitoring(pet_id, created_at DESC);
 
--- ─── LANGKAH 14: Set Admin pertama ───────────────────────────────────
--- GANTI UUID di bawah dengan UUID akun Admin Anda, lalu uncomment:
--- update profiles set role = 'Admin' where id = 'GANTI-DENGAN-UUID-ANDA';
+CREATE INDEX IF NOT EXISTS monitoring_device_id_idx
+  ON monitoring(device_id, created_at DESC);
 
--- ─── VERIFIKASI: Cek semua tabel & kolom penting ─────────────────────
-select
-  table_name,
-  string_agg(column_name, ', ' order by ordinal_position) as kolom
-from information_schema.columns
-where table_schema = 'public'
-  and table_name in ('profiles','pets','schedules','medical_records','notifications','monitoring','device_commands')
-group by table_name
-order by table_name;
 
--- =====================================================================
--- SELESAI! Semua tabel, kolom, RLS, dan trigger sudah sinkron.
--- =====================================================================
+-- ================================================================
+-- [7] PROFILES — pastikan kolom streak ada
+-- ================================================================
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS login_streak    integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS last_login_date date;
+
+
+-- ================================================================
+-- [8] VERIFIKASI — tampilkan hasil akhir
+-- ================================================================
+
+-- Cek kolom tabel monitoring
+SELECT
+  column_name,
+  data_type,
+  column_default,
+  is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name   = 'monitoring'
+ORDER BY ordinal_position;
+
+-- Cek semua RLS policies aktif
+SELECT
+  tablename,
+  policyname,
+  cmd,
+  roles
+FROM pg_policies
+WHERE tablename IN ('monitoring', 'device_commands', 'profiles', 'pets')
+ORDER BY tablename, policyname;
+
+-- ================================================================
+-- SELESAI — Migration v3.0 berhasil dijalankan
+-- ================================================================

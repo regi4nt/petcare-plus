@@ -68,18 +68,26 @@ const DEMO_NOTIFICATIONS = [
 // Simulasi data IoT monitoring untuk akun Demo
 const generateDemoMonitoring = () => {
   const now = Date.now();
-  return Array.from({ length: 20 }, (_, i) => ({
-    id: `demo-mon-${i}`,
-    pet_id: 'demo-pet-1',
-    suhu: (38.0 + Math.sin(i * 0.5) * 0.8).toFixed(1),
-    heart_rate: Math.round(85 + Math.sin(i * 0.3) * 15),
-    spo2: Math.round(97 + Math.sin(i * 0.2) * 2),
-    ax: (Math.random() * 2 - 1).toFixed(2),
-    ay: (Math.random() * 2 - 1).toFixed(2),
-    az: (Math.random() * 2 - 1).toFixed(2),
-    mode: 'normal',
-    created_at: new Date(now - i * 3 * 60 * 1000).toISOString(),
-  }));
+  return Array.from({ length: 20 }, (_, i) => {
+    const battLevel = Math.round(70 - i * 1.5 + Math.sin(i * 0.4) * 5);
+    const bl = Math.max(5, Math.min(100, battLevel));
+    const bs = bl >= 95 ? 'full' : bl >= 20 ? 'discharging' : bl >= 10 ? 'low' : 'critical';
+    return {
+      id: `demo-mon-${i}`,
+      pet_id: 'demo-pet-1',
+      device_id: 'esp32-01',
+      suhu: (38.0 + Math.sin(i * 0.5) * 0.8).toFixed(1),
+      heart_rate: Math.round(85 + Math.sin(i * 0.3) * 15),
+      spo2: Math.round(97 + Math.sin(i * 0.2) * 2),
+      ax: (Math.random() * 2 - 1).toFixed(2),
+      ay: (Math.random() * 2 - 1).toFixed(2),
+      az: (Math.random() * 2 - 1).toFixed(2),
+      mode: i % 5 === 0 ? 'kandang' : 'kalung',
+      battery_level: bl,
+      battery_status: bs,
+      created_at: new Date(now - i * 3 * 60 * 1000).toISOString(),
+    };
+  });
 };
 
 
@@ -1341,7 +1349,10 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
           avg_suhu: avgFn(demoMon, 'suhu'),
           avg_heart_rate: avgFn(demoMon, 'heart_rate'),
           avg_spo2: avgFn(demoMon, 'spo2'),
-          latest_mode: 'normal',
+          avg_battery_level: avgFn(demoMon, 'battery_level'),
+          latest_mode: demoMon[0]?.mode ?? 'kalung',
+          latest_battery_level: demoMon[0]?.battery_level ?? null,
+          latest_battery_status: demoMon[0]?.battery_status ?? 'unknown',
           reading_count: demoMon.length,
           last_reading_at: demoMon[0]?.created_at,
           ax_history: demoMon.map(d => d.ax),

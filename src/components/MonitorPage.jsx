@@ -1,5 +1,5 @@
 // ─── MONITOR PAGE (IoT) dengan Battery Status ───────────────────────────
-const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) => {
+const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, profile }) => {
   const [latest, setLatest] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -11,6 +11,33 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
     if (!petId) return;
     setLoading(true);
     try {
+      // Akun Demo: gunakan data IoT simulasi
+      if (profile?.role === 'Demo') {
+        const now = Date.now();
+        const demoMon = Array.from({ length: 15 }, (_, i) => {
+          const bl = Math.max(5, Math.min(100, Math.round(70 - i * 1.5 + Math.sin(i * 0.4) * 5)));
+          const bs = bl >= 95 ? 'full' : bl >= 20 ? 'discharging' : bl >= 10 ? 'low' : 'critical';
+          return {
+            id: `demo-mon-${i}`,
+            pet_id: petId,
+            device_id: 'esp32-01',
+            suhu: (38.0 + Math.sin(i * 0.5) * 0.8).toFixed(1),
+            heart_rate: Math.round(85 + Math.sin(i * 0.3) * 15),
+            spo2: Math.round(97 + Math.sin(i * 0.2) * 2),
+            ax: (Math.random() * 2 - 1).toFixed(2),
+            ay: (Math.random() * 2 - 1).toFixed(2),
+            az: (Math.random() * 2 - 1).toFixed(2),
+            mode: i % 5 === 0 ? 'kandang' : 'kalung',
+            battery_level: bl,
+            battery_status: bs,
+            created_at: new Date(now - i * 3 * 60 * 1000).toISOString(),
+          };
+        });
+        setLatest(demoMon[0]);
+        setHistory([...demoMon].reverse());
+        setLastUpdate(new Date());
+        return;
+      }
       const [one, hist] = await Promise.all([
         monitoringService.getOne(petId),
         monitoringService.getLatest(petId, 15),
@@ -23,7 +50,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false }) =>
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     if (!selectedPet?.id) return;

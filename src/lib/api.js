@@ -342,7 +342,7 @@ export const monitoringService = {
   async getCalculated(petId, limit = 20) {
     const { data, error } = await supabase
       .from('monitoring')
-      .select('suhu, heart_rate, spo2, ax, ay, az, mode, created_at')
+      .select('suhu, heart_rate, spo2, ax, ay, az, mode, battery_level, battery_status, created_at')
       .eq('pet_id', petId)
       .order('created_at', { ascending: false })
       .limit(limit);
@@ -362,7 +362,10 @@ export const monitoringService = {
       avg_suhu: avg('suhu'),
       avg_heart_rate: avg('heart_rate'),
       avg_spo2: avg('spo2'),
+      avg_battery_level: avg('battery_level'),
       latest_mode: data[0]?.mode,
+      latest_battery_level: data[0]?.battery_level ?? null,
+      latest_battery_status: data[0]?.battery_status ?? 'unknown',
       reading_count: data.length,
       last_reading_at: data[0]?.created_at,
       ax_history: axHistory,
