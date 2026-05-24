@@ -11,7 +11,9 @@ import {
   UtensilsCrossed, Dumbbell, LucideStar, Info, BookOpen, Loader2,
   Cpu, Wifi, WifiOff, Radio, RefreshCw, Home, Tag, ChevronDown, PawPrint, Moon, Sun,
   Download, Smartphone, Monitor, Share2, ArrowDown, MoreHorizontal, Chrome,
-  Zap, LogIn, Bot, Send, Key, ChevronUp, Sparkles, MessageCircle, ExternalLink
+  Zap, LogIn, Bot, Send, Key, ChevronUp, Sparkles, MessageCircle, ExternalLink,
+  UserPlus, UserX, UserCog, Shield, Database, Link2, Unlink, Sliders, Hash, Users,
+  PenLine, ShieldCheck
 } from 'lucide-react';
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService, deviceCommandService, adminService } from './lib/api';
 import { HibernationControlModal } from './components/HibernationControl';
@@ -39,6 +41,19 @@ const canWrite = (role) => role !== ROLES.DEMO;
 
 // Helper: cek apakah role adalah Admin
 const isAdmin = (role) => role === ROLES.ADMIN;
+
+// Helper: cek apakah pengguna boleh menambah hewan baru.
+// - Admin     : selalu boleh
+// - Demo      : tidak boleh (demoGuard akan handle)
+// - Subscribe : boleh hanya jika pets.length < max_pets
+//   max_pets null/undefined = belum diatur admin → dianggap 0 (terkunci)
+const canAddPet = (profile, petsCount) => {
+  if (!profile) return false;
+  if (profile.role === ROLES.ADMIN) return true;
+  if (profile.role === ROLES.DEMO) return false;
+  const maxPets = profile.max_pets ?? 0;
+  return maxPets > 0 && petsCount < maxPets;
+};
 
 // ─── DEMO DATA (Simulasi untuk akun Demo) ─────────────────────────────
 const DEMO_PETS = [
@@ -1392,7 +1407,7 @@ const callAiProvider = async (provider, messages) => {
 
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────
-const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications, records, onAlert, onUpdatePet, onDeletePet, streak = 0, profile }) => {
+const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, canAdd = true, notifications, records, onAlert, onUpdatePet, onDeletePet, streak = 0, profile }) => {
   const [iotCalc, setIotCalc]         = useState(null);
   const [dailyHealth, setDailyHealth] = useState([]);
   const [iotLoading, setIotLoading]   = useState(false);
@@ -1650,9 +1665,18 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
       <Cat size={48} className="mx-auto mb-4 opacity-30" />
       <p className="font-semibold text-lg mb-2">Belum ada hewan terdaftar</p>
       <p className="text-sm mb-6">Tambahkan hewan peliharaan pertamamu!</p>
-      <button onClick={onAddPet} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all inline-flex items-center gap-2">
-        <Plus size={16} />Tambah Hewan
-      </button>
+      {canAdd ? (
+        <button onClick={onAddPet} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all inline-flex items-center gap-2">
+          <Plus size={16} />Tambah Hewan
+        </button>
+      ) : (
+        <div className="inline-flex flex-col items-center gap-2">
+          <span className="bg-slate-100 text-slate-400 px-6 py-3 rounded-2xl font-bold inline-flex items-center gap-2 cursor-not-allowed select-none">
+            <Lock size={16} />Tambah Hewan
+          </span>
+          <p className="text-xs text-slate-400">Slot hewan belum diaktifkan. Hubungi admin.</p>
+        </div>
+      )}
     </div>
   );
 
@@ -1760,9 +1784,15 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, notifications,
             Hewan Peliharaan
             <span className="bg-indigo-100 text-indigo-600 text-[10px] font-black px-2 py-0.5 rounded-full">{pets.length}</span>
           </h3>
-          <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
-            <Plus size={12} /> Tambah
-          </button>
+          {canAdd ? (
+            <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
+              <Plus size={12} /> Tambah
+            </button>
+          ) : (
+            <span title="Slot hewan terkunci. Hubungi admin." className="flex items-center gap-1 text-xs bg-slate-100 text-slate-400 px-3 py-1.5 rounded-xl font-bold cursor-not-allowed select-none">
+              <Lock size={12} /> Tambah
+            </span>
+          )}
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {pets.map(pet => {
@@ -4605,37 +4635,64 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
 
 // ─── ADMIN PANEL COMPONENT ────────────────────────────────────────────
 const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
+  const TABS = [
+    { id: 'accounts', label: 'Akun', icon: Users },
+    { id: 'slots',    label: 'Slot Hewan', icon: Sliders },
+    { id: 'iot',      label: 'ID IoT', icon: Database },
+  ];
+
+  const [activeAdminTab, setActiveAdminTab] = useState('accounts');
   const [users, setUsers] = useState([]);
+  const [allPets, setAllPets] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [updating, setUpdating] = useState(null); // userId yang sedang diupdate
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('all');
+  const [updating, setUpdating] = useState(null);
 
-  const loadUsers = async () => {
+  // Edit akun state
+  const [editUserId, setEditUserId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', role: 'Demo' });
+
+  // Edit IoT state
+  const [editIotPetId, setEditIotPetId] = useState(null);
+  const [editIotValue, setEditIotValue] = useState('');
+
+  // Edit slot state
+  const [editSlotUserId, setEditSlotUserId] = useState(null);
+  const [editSlotValue, setEditSlotValue] = useState(3);
+
+  // Confirm delete
+  const [confirmDelete, setConfirmDelete] = useState(null); // {type:'user'|'pet', id, name}
+
+  const loadAll = async () => {
     setLoading(true);
     try {
-      const data = await adminService.getAllProfiles();
-      setUsers(data);
+      const [profilesData, petsData] = await Promise.all([
+        adminService.getAllProfiles(),
+        adminService.getAllPets().catch(() => []),
+      ]);
+      setUsers(profilesData);
+      setAllPets(petsData);
     } catch (e) {
-      showToast('Gagal memuat daftar pengguna. Pastikan RLS Supabase mengizinkan Admin membaca semua profiles.', 'error');
+      showToast('Gagal memuat data. Periksa RLS Supabase.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadUsers(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleRoleChange = async (userId, newRole) => {
-    setUpdating(userId);
-    try {
-      await adminService.updateRole(userId, newRole);
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
-      showToast(`Role berhasil diubah ke ${newRole}`);
-    } catch (e) {
-      showToast('Gagal mengubah role. Pastikan RLS Supabase mengizinkan Admin update profiles.', 'error');
-    } finally {
-      setUpdating(null);
-    }
+  const ROLE_OPTIONS = [
+    { value: 'Subscribe', label: '⭐ Subscribe' },
+    { value: 'Demo',      label: '🔍 Demo' },
+    { value: 'Admin',     label: '🛡️ Admin' },
+  ];
+
+  const getRoleCls = (role) => {
+    if (role === 'Subscribe') return 'bg-indigo-50 text-indigo-700 border border-indigo-200';
+    if (role === 'Demo')      return 'bg-amber-50 text-amber-700 border border-amber-200';
+    if (role === 'Admin')     return 'bg-rose-50 text-rose-700 border border-rose-200';
+    return 'bg-slate-100 text-slate-600';
   };
 
   const filtered = users.filter(u => {
@@ -4644,28 +4701,331 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
     return matchSearch && matchRole;
   });
 
+  // ── Handlers ──────────────────────────────────────────────────────
+
+  const openEdit = (user) => {
+    setEditUserId(user.id);
+    setEditForm({ name: user.name || '', phone: user.phone || '', role: user.role || 'Demo' });
+  };
+
+  const saveEdit = async () => {
+    if (!editUserId) return;
+    setUpdating(editUserId);
+    try {
+      await adminService.updateProfile(editUserId, { name: editForm.name, phone: editForm.phone });
+      if (editForm.role !== users.find(u => u.id === editUserId)?.role) {
+        await adminService.updateRole(editUserId, editForm.role);
+      }
+      setUsers(prev => prev.map(u => u.id === editUserId ? { ...u, ...editForm } : u));
+      showToast('Akun berhasil diperbarui.');
+      setEditUserId(null);
+    } catch (e) {
+      showToast('Gagal menyimpan perubahan.', 'error');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleSaveSlot = async (userId, val) => {
+    const num = Math.max(0, Math.min(20, Number(val)));
+    setUpdating(userId + '_slot');
+    try {
+      await adminService.updateMaxPets(userId, num);
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, max_pets: num } : u));
+      showToast(`Slot hewan diubah menjadi ${num}.`);
+      setEditSlotUserId(null);
+    } catch (e) {
+      showToast('Gagal mengubah slot. Pastikan kolom max_pets ada di tabel profiles.', 'error');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleSaveIot = async (petId, val) => {
+    setUpdating(petId + '_iot');
+    try {
+      await adminService.updatePetIotId(petId, val.trim());
+      setAllPets(prev => prev.map(p => p.id === petId ? { ...p, iot_device_id: val.trim() || null } : p));
+      showToast('ID IoT berhasil diperbarui.');
+      setEditIotPetId(null);
+    } catch (e) {
+      showToast('Gagal menyimpan ID IoT. Pastikan kolom iot_device_id ada di tabel pets.', 'error');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleDeletePet = async (petId) => {
+    setUpdating(petId + '_del');
+    try {
+      await adminService.deletePet(petId);
+      setAllPets(prev => prev.filter(p => p.id !== petId));
+      showToast('Hewan berhasil dihapus.');
+    } catch (e) {
+      showToast('Gagal menghapus hewan.', 'error');
+    } finally {
+      setUpdating(null);
+      setConfirmDelete(null);
+    }
+  };
+
   const countByRole = (role) => users.filter(u => u.role === role).length;
 
-  const ROLE_OPTIONS = [
-    { value: 'Subscribe', label: '⭐ Subscribe', cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-    { value: 'Demo',      label: '🔍 Demo',      cls: 'bg-amber-50 text-amber-700 border-amber-200' },
-    { value: 'Admin',     label: '🛡️ Admin',     cls: 'bg-rose-50 text-rose-700 border-rose-200' },
-  ];
+  // ── Render Tabs ───────────────────────────────────────────────────
 
-  const getRoleCls = (role) => {
-    if (role === 'Subscribe') return 'bg-indigo-50 text-indigo-700';
-    if (role === 'Demo')      return 'bg-amber-50 text-amber-700';
-    if (role === 'Admin')     return 'bg-rose-50 text-rose-700';
-    return 'bg-slate-100 text-slate-600';
+  const renderAccounts = () => (
+    <div className="space-y-4">
+      {/* Filter & Search */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input type="text" placeholder="Cari nama pengguna…" value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-1 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
+          className="text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300">
+          <option value="all">Semua Role</option>
+          <option value="Subscribe">Subscribe</option>
+          <option value="Demo">Demo</option>
+          <option value="Admin">Admin</option>
+        </select>
+      </div>
+
+      {/* Modal Edit Akun */}
+      {editUserId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.4)'}}>
+          <div className="bg-white rounded-[24px] p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-800">Edit Akun</h3>
+              <button onClick={() => setEditUserId(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200"><X size={15}/></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Nama</label>
+                <input className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))} placeholder="Nama pengguna" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Telepon</label>
+                <input className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  value={editForm.phone} onChange={e => setEditForm(f => ({...f, phone: e.target.value}))} placeholder="No. telepon" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 mb-1 block">Role</label>
+                <select className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  value={editForm.role} onChange={e => setEditForm(f => ({...f, role: e.target.value}))}>
+                  {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setEditUserId(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">Batal</button>
+              <button onClick={saveEdit} disabled={!!updating}
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 flex items-center justify-center gap-1 disabled:opacity-60">
+                {updating ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.4)'}}>
+          <div className="bg-white rounded-[24px] p-6 w-full max-w-sm shadow-2xl text-center">
+            <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Trash2 size={20} className="text-rose-500"/>
+            </div>
+            <h3 className="font-black text-slate-800 mb-1">Hapus Data?</h3>
+            <p className="text-sm text-slate-500 mb-5">Data <strong>{confirmDelete.name}</strong> akan dihapus permanen.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">Batal</button>
+              <button onClick={() => handleDeletePet(confirmDelete.id)} disabled={!!updating}
+                className="flex-1 py-2.5 rounded-xl bg-rose-500 text-white text-sm font-bold hover:bg-rose-600 disabled:opacity-60">
+                Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User List */}
+      {loading ? (
+        <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 size={22} className="animate-spin mr-2"/> Memuat…</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-10 text-slate-400 text-sm">Tidak ada pengguna ditemukan.</div>
+      ) : (
+        <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
+          {filtered.map(user => (
+            <div key={user.id} className="flex items-center gap-3 p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center shrink-0">
+                <span className="text-white text-sm font-bold">{(user.name || '?')[0].toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-800 text-sm truncate">{user.name || '(tanpa nama)'}</p>
+                <p className="text-xs text-slate-400 truncate">{user.phone || '—'}</p>
+              </div>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${getRoleCls(user.role)}`}>{user.role || 'Demo'}</span>
+              <button onClick={() => openEdit(user)}
+                className="w-8 h-8 flex items-center justify-center rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 shrink-0 transition-colors" title="Edit akun">
+                <PenLine size={14}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSlots = () => (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500">Atur batas maksimal jumlah hewan yang bisa ditambahkan tiap pengguna.</p>
+      {loading ? (
+        <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 size={22} className="animate-spin mr-2"/> Memuat…</div>
+      ) : users.length === 0 ? (
+        <div className="text-center py-10 text-slate-400 text-sm">Belum ada pengguna.</div>
+      ) : (
+        <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+          {users.map(user => {
+            const petCount = allPets.filter(p => p.user_id === user.id).length;
+            const maxPets  = user.max_pets ?? 3;
+            const isEditing = editSlotUserId === user.id;
+            return (
+              <div key={user.id} className="flex items-center gap-3 p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shrink-0">
+                  <span className="text-white text-sm font-bold">{(user.name || '?')[0].toUpperCase()}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-800 text-sm truncate">{user.name || '(tanpa nama)'}</p>
+                  <p className="text-xs text-slate-400">{petCount} / {maxPets} hewan terpakai</p>
+                </div>
+                {/* Progress bar */}
+                <div className="hidden sm:block w-24">
+                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-400 rounded-full transition-all" style={{width: `${Math.min(100, (petCount/Math.max(maxPets,1))*100)}%`}}/>
+                  </div>
+                </div>
+                {isEditing ? (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input type="number" min="0" max="20" value={editSlotValue}
+                      onChange={e => setEditSlotValue(e.target.value)}
+                      className="w-14 text-sm text-center px-2 py-1 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+                    <button onClick={() => handleSaveSlot(user.id, editSlotValue)} disabled={updating === user.id + '_slot'}
+                      className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-60">
+                      {updating === user.id + '_slot' ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
+                    </button>
+                    <button onClick={() => setEditSlotUserId(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"><X size={13}/></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-black text-slate-700 w-6 text-center">{maxPets}</span>
+                    <button onClick={() => { setEditSlotUserId(user.id); setEditSlotValue(maxPets); }}
+                      className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-colors" title="Edit slot">
+                      <Sliders size={14}/>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100">
+        <p className="text-xs text-emerald-700 leading-relaxed"><strong>ℹ️ Catatan:</strong> Tambahkan kolom <code className="bg-emerald-100 px-1 rounded">max_pets integer default 3</code> ke tabel <code className="bg-emerald-100 px-1 rounded">profiles</code> agar fitur ini berfungsi.</p>
+      </div>
+    </div>
+  );
+
+  const renderIot = () => {
+    const petsWithUser = allPets.map(p => ({
+      ...p,
+      userName: users.find(u => u.id === p.user_id)?.name || '(tanpa nama)',
+    }));
+    return (
+      <div className="space-y-4">
+        <p className="text-xs text-slate-500">Hubungkan ID perangkat IoT ESP32 ke hewan yang terdaftar.</p>
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 size={22} className="animate-spin mr-2"/> Memuat…</div>
+        ) : petsWithUser.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 text-sm">Belum ada hewan terdaftar.</div>
+        ) : (
+          <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+            {petsWithUser.map(pet => {
+              const isEditing = editIotPetId === pet.id;
+              return (
+                <div key={pet.id} className="p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center shrink-0">
+                      <PawPrint size={15} className="text-white"/>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 text-sm">{pet.name} <span className="text-xs text-slate-400 font-normal">({pet.species})</span></p>
+                      <p className="text-xs text-slate-400 truncate">👤 {pet.userName}</p>
+                    </div>
+                    {/* IoT badge */}
+                    {pet.iot_device_id ? (
+                      <span className="hidden sm:flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-mono font-semibold shrink-0">
+                        <Wifi size={11}/>{pet.iot_device_id}
+                      </span>
+                    ) : (
+                      <span className="hidden sm:flex items-center gap-1 text-xs bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full shrink-0">
+                        <WifiOff size={11}/>Belum terhubung
+                      </span>
+                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {!isEditing && (
+                        <>
+                          <button onClick={() => { setEditIotPetId(pet.id); setEditIotValue(pet.iot_device_id || ''); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors" title="Edit IoT ID">
+                            <Link2 size={14}/>
+                          </button>
+                          <button onClick={() => setConfirmDelete({ id: pet.id, name: pet.name })}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-500 transition-colors" title="Hapus hewan">
+                            <Trash2 size={14}/>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <Hash size={14} className="text-slate-400 shrink-0"/>
+                      <input
+                        className="flex-1 text-sm font-mono px-3 py-1.5 rounded-xl border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        placeholder="ID perangkat (mis. esp32-01)"
+                        value={editIotValue}
+                        onChange={e => setEditIotValue(e.target.value)}
+                      />
+                      <button onClick={() => handleSaveIot(pet.id, editIotValue)} disabled={updating === pet.id + '_iot'}
+                        className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-60">
+                        {updating === pet.id + '_iot' ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
+                      </button>
+                      <button onClick={() => setEditIotPetId(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"><X size={13}/></button>
+                    </div>
+                  )}
+                  {/* Mobile IoT badge */}
+                  {pet.iot_device_id && (
+                    <div className="sm:hidden mt-2 flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-xl font-mono font-semibold">
+                      <Wifi size={11}/>{pet.iot_device_id}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
+          <p className="text-xs text-blue-700 leading-relaxed"><strong>ℹ️ Catatan:</strong> Tambahkan kolom <code className="bg-blue-100 px-1 rounded">iot_device_id text</code> ke tabel <code className="bg-blue-100 px-1 rounded">pets</code> agar fitur ini berfungsi. ID ini harus sesuai dengan <code className="bg-blue-100 px-1 rounded">device_id</code> yang dikonfigurasi di firmware ESP32.</p>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="space-y-6">
-      {/* Header Card */}
+      {/* Header */}
       <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-rose-100 rounded-2xl flex items-center justify-center">
-            <span className="text-xl">🛡️</span>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 bg-rose-100 rounded-2xl flex items-center justify-center shrink-0">
+            <ShieldCheck size={20} className="text-rose-600"/>
           </div>
           <div>
             <h2 className="font-black text-slate-800 text-xl">Panel Admin</h2>
@@ -4674,119 +5034,54 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
-            { label: 'Total Pengguna', value: users.length, icon: '👥', color: 'bg-indigo-50 text-indigo-700' },
-            { label: 'Akun Subscribe', value: countByRole('Subscribe'), icon: '⭐', color: 'bg-blue-50 text-blue-700' },
-            { label: 'Akun Demo',      value: countByRole('Demo'),      icon: '🔍', color: 'bg-amber-50 text-amber-700' },
+            { label: 'Total Pengguna', value: users.length,          icon: '👥', color: 'bg-indigo-50 text-indigo-700' },
+            { label: 'Subscribe',      value: countByRole('Subscribe'), icon: '⭐', color: 'bg-blue-50 text-blue-700' },
+            { label: 'Demo',           value: countByRole('Demo'),      icon: '🔍', color: 'bg-amber-50 text-amber-700' },
+            { label: 'Total Hewan',    value: allPets.length,          icon: '🐾', color: 'bg-emerald-50 text-emerald-700' },
           ].map(item => (
-            <div key={item.label} className={`rounded-2xl p-4 ${item.color}`}>
-              <p className="text-2xl mb-1">{item.icon}</p>
-              <p className="text-2xl font-black">{loading ? '…' : item.value}</p>
-              <p className="text-xs font-semibold opacity-70">{item.label}</p>
+            <div key={item.label} className={`rounded-2xl p-3 ${item.color}`}>
+              <p className="text-xl mb-0.5">{item.icon}</p>
+              <p className="text-xl font-black">{loading ? '…' : item.value}</p>
+              <p className="text-[10px] font-semibold opacity-70 leading-tight">{item.label}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 p-4 bg-rose-50 rounded-2xl border border-rose-100">
-          <p className="text-sm font-bold text-rose-700 mb-1">🔐 Akses Admin Aktif</p>
-          <p className="text-xs text-rose-600">Anda login sebagai <strong>{adminProfile?.name || adminEmail}</strong> dengan hak akses penuh. Gunakan dengan bijak.</p>
+        <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100">
+          <p className="text-xs font-bold text-rose-700 mb-0.5">🔐 Akses Admin Aktif</p>
+          <p className="text-xs text-rose-600">Login sebagai <strong>{adminProfile?.name || adminEmail}</strong>. Gunakan dengan bijak.</p>
         </div>
       </div>
 
-      {/* Account Management Card */}
-      <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-bold text-slate-800 text-base">Kelola Akun Pengguna</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Ubah role akun Subscribe, Demo, atau Admin</p>
-          </div>
-          <button onClick={loadUsers} disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-semibold text-slate-600 transition-colors">
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            Refresh
+      {/* Tabbed Card */}
+      <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden">
+        {/* Tab Header */}
+        <div className="flex border-b border-slate-100">
+          {TABS.map(tab => (
+            <button key={tab.id} onClick={() => setActiveAdminTab(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all ${activeAdminTab === tab.id ? 'text-indigo-600 border-b-2 border-indigo-500 bg-indigo-50/50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+              <tab.icon size={15}/>{tab.label}
+            </button>
+          ))}
+          <button onClick={loadAll} disabled={loading} title="Refresh"
+            className="px-4 flex items-center justify-center text-slate-400 hover:text-slate-600 border-l border-slate-100 hover:bg-slate-50 transition-colors">
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''}/>
           </button>
         </div>
 
-        {/* Filter & Search */}
-        <div className="flex flex-col sm:flex-row gap-2 mb-4">
-          <input
-            type="text"
-            placeholder="Cari nama pengguna…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="flex-1 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-          />
-          <select
-            value={filterRole}
-            onChange={e => setFilterRole(e.target.value)}
-            className="text-sm px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white">
-            <option value="all">Semua Role</option>
-            <option value="Subscribe">Subscribe</option>
-            <option value="Demo">Demo</option>
-            <option value="Admin">Admin</option>
-          </select>
-        </div>
-
-        {/* User List */}
-        {loading ? (
-          <div className="flex items-center justify-center py-10 text-slate-400">
-            <Loader2 size={22} className="animate-spin mr-2" /> Memuat pengguna…
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-10 text-slate-400 text-sm">
-            {search || filterRole !== 'all' ? 'Tidak ada pengguna yang cocok dengan filter.' : 'Belum ada data pengguna.'}
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-            {filtered.map(user => (
-              <div key={user.id}
-                className="flex items-center gap-3 p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                {/* Avatar */}
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center shrink-0">
-                  <span className="text-white text-sm font-bold">
-                    {(user.name || '?')[0].toUpperCase()}
-                  </span>
-                </div>
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 text-sm truncate">{user.name || '(tanpa nama)'}</p>
-                  <p className="text-xs text-slate-400 truncate">{user.phone || '—'}</p>
-                </div>
-                {/* Current Role Badge */}
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${getRoleCls(user.role)}`}>
-                  {user.role || 'Subscribe'}
-                </span>
-                {/* Role Change Select */}
-                <div className="relative shrink-0">
-                  {updating === user.id ? (
-                    <Loader2 size={16} className="animate-spin text-indigo-500" />
-                  ) : (
-                    <select
-                      value={user.role || 'Subscribe'}
-                      onChange={e => handleRoleChange(user.id, e.target.value)}
-                      className="text-xs px-2 py-1.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer">
-                      {ROLE_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Info Note */}
-        <div className="mt-4 p-3 bg-blue-50 rounded-2xl">
-          <p className="text-xs text-blue-700 leading-relaxed">
-            <strong>ℹ️ Catatan:</strong> Perubahan role langsung tersimpan ke Supabase. Pastikan RLS policy tabel <code className="bg-blue-100 px-1 rounded">profiles</code> mengizinkan Admin membaca & mengupdate semua baris.
-          </p>
+        {/* Tab Content */}
+        <div className="p-5">
+          {activeAdminTab === 'accounts' && renderAccounts()}
+          {activeAdminTab === 'slots'    && renderSlots()}
+          {activeAdminTab === 'iot'      && renderIot()}
         </div>
       </div>
     </div>
   );
 };
+
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────
 export default function App() {
@@ -5019,6 +5314,11 @@ export default function App() {
 
   const handleAddPet = async (form) => {
     if (demoGuard()) return;
+    // Guard slot hewan untuk akun Subscribe
+    if (!canAddPet(profile, pets.length)) {
+      showToast('Slot hewan penuh atau belum diaktifkan. Hubungi admin untuk menambah slot.', 'error');
+      return;
+    }
     setPetLoading(true);
     try {
       const { age_unit, ...petData } = form; // strip age_unit — not a DB column
@@ -5156,8 +5456,8 @@ export default function App() {
     // Tab Admin hanya muncul untuk role Admin
     ...(isAdmin(profile?.role) ? [{ id: 'admin', icon: Lock, label: 'Panel Admin', mobileLabel: 'Admin' }] : []),
   ];
-  // Nav khusus mobile — tanpa Pengaturan (akses via avatar/header)
-  const MOBILE_NAV = NAV.filter(n => n.id !== 'settings');
+  // Nav khusus mobile — tanpa Pengaturan (akses via avatar/header) dan tanpa Admin (akses via FAB tengah)
+  const MOBILE_NAV = NAV.filter(n => n.id !== 'settings' && n.id !== 'admin');
 
   const unreadCount = notifications.filter(n => n.unread).length;
   const pageTitles = { dashboard: 'Dashboard', monitor: 'Monitor IoT', schedule: 'Jadwal Kegiatan', medical: 'Rekam Medis', settings: 'Pengaturan', admin: 'Panel Admin' };
@@ -5291,7 +5591,7 @@ export default function App() {
           )}
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
+              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} canAdd={canAddPet(profile, pets.length)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} profile={profile} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
@@ -5321,13 +5621,22 @@ export default function App() {
               <item.icon size={21} />
             </button>
           ))}
-          {/* FAB Darurat — melayang di atas navbar, tidak overlap dengan tombol nav */}
-          <button onClick={handlePanggilDokter}
-            className="absolute left-1/2 -translate-x-1/2 -top-7 flex items-center justify-center active:scale-95 transition-transform z-10">
-            <div className="w-14 h-14 bg-rose-500 rounded-full flex items-center justify-center shadow-xl shadow-rose-400/60 ring-4 ring-white">
-              <Phone size={22} className="text-white" />
-            </div>
-          </button>
+          {/* FAB Tengah — Panel Admin (jika Admin) atau Darurat (selain Admin) */}
+          {isAdmin(profile?.role) ? (
+            <button onClick={() => handleTabChange('admin')}
+              className="absolute left-1/2 -translate-x-1/2 -top-7 flex items-center justify-center active:scale-95 transition-transform z-10">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl ring-4 ring-white ${activeTab === 'admin' ? 'bg-rose-700 shadow-rose-600/60' : 'bg-rose-600 shadow-rose-500/60'}`}>
+                <Lock size={22} className="text-white" />
+              </div>
+            </button>
+          ) : (
+            <button onClick={handlePanggilDokter}
+              className="absolute left-1/2 -translate-x-1/2 -top-7 flex items-center justify-center active:scale-95 transition-transform z-10">
+              <div className="w-14 h-14 bg-rose-500 rounded-full flex items-center justify-center shadow-xl shadow-rose-400/60 ring-4 ring-white">
+                <Phone size={22} className="text-white" />
+              </div>
+            </button>
+          )}
         </nav>
       </main>
 

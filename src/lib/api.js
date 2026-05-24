@@ -588,3 +588,54 @@ export const adminService = {
     return data;
   },
 };
+
+// ─── EXTENDED ADMIN SERVICE (append) ───────────────────────────────────────
+// Patch adminService dengan fungsi tambahan
+Object.assign(adminService, {
+  async updateProfile(userId, updates) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateMaxPets(userId, maxPets) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ max_pets: maxPets })
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async getAllPets() {
+    const { data, error } = await supabase
+      .from('pets')
+      .select('id, name, species, breed, user_id, iot_device_id, created_at')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async updatePetIotId(petId, iotDeviceId) {
+    const { data, error } = await supabase
+      .from('pets')
+      .update({ iot_device_id: iotDeviceId || null })
+      .eq('id', petId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async deletePet(petId) {
+    const { error } = await supabase.from('pets').delete().eq('id', petId);
+    if (error) throw error;
+  },
+});
