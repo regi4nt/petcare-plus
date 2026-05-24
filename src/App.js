@@ -43,20 +43,12 @@ const canWrite = (role) => role !== ROLES.DEMO;
 const isAdmin = (role) => role === ROLES.ADMIN;
 
 // Helper: cek apakah pengguna boleh menambah hewan baru.
-// - Admin     : selalu boleh
-// - Demo      : tidak boleh (demoGuard akan handle)
-// - Subscribe : boleh hanya jika pets.length < max_pets
-//   max_pets null/undefined = belum diatur admin → dianggap 0 (terkunci)
-const canAddPet = (profile, petsCount) => {
+// - Admin     : selalu boleh (hanya admin yang bisa tambah hewan)
+// - Demo      : tidak boleh
+// - Subscribe : tidak boleh — hewan hanya bisa ditambahkan oleh admin
+const canAddPet = (profile) => {
   if (!profile) return false;
-  if (profile.role === ROLES.ADMIN) return true;
-  if (profile.role === ROLES.DEMO) return false;
-  // Subscribe: cek slot yang diberikan admin.
-  // Kolom max_pets: null / undefined / 0 = belum diatur → terkunci.
-  // Hanya integer > 0 yang membuka akses.
-  const rawSlot = profile.max_pets;
-  const maxPets = (rawSlot === null || rawSlot === undefined) ? 0 : Number(rawSlot);
-  return Number.isFinite(maxPets) && maxPets > 0 && petsCount < maxPets;
+  return profile.role === ROLES.ADMIN;
 };
 
 // ─── DEMO DATA (Simulasi untuk akun Demo) ─────────────────────────────
@@ -1668,17 +1660,20 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, canAdd = false
     <div className="text-center py-20 text-slate-400">
       <Cat size={48} className="mx-auto mb-4 opacity-30" />
       <p className="font-semibold text-lg mb-2">Belum ada hewan terdaftar</p>
-      <p className="text-sm mb-6">Tambahkan hewan peliharaan pertamamu!</p>
       {canAdd ? (
-        <button onClick={onAddPet} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all inline-flex items-center gap-2">
-          <Plus size={16} />Tambah Hewan
-        </button>
+        <>
+          <p className="text-sm mb-6">Tambahkan hewan peliharaan untuk pengguna ini.</p>
+          <button onClick={onAddPet} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all inline-flex items-center gap-2">
+            <Plus size={16} />Tambah Hewan
+          </button>
+        </>
       ) : (
         <div className="inline-flex flex-col items-center gap-2">
-          <span className="bg-slate-100 text-slate-400 px-6 py-3 rounded-2xl font-bold inline-flex items-center gap-2 cursor-not-allowed select-none">
-            <Lock size={16} />Tambah Hewan
-          </span>
-          <p className="text-xs text-slate-400">Slot hewan belum diaktifkan. Hubungi admin.</p>
+          <p className="text-sm mb-3 text-slate-400">Hewan peliharaan belum terdaftar.</p>
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-2xl text-xs font-semibold">
+            <Lock size={14} />
+            <span>Hanya admin yang dapat menambahkan hewan</span>
+          </div>
         </div>
       )}
     </div>
@@ -1787,28 +1782,14 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, canAdd = false
           <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
             Hewan Peliharaan
             <span className="bg-indigo-100 text-indigo-600 text-[10px] font-black px-2 py-0.5 rounded-full">{pets.length}</span>
-            {/* Slot counter — tampil hanya untuk Subscribe */}
-            {profile?.role === 'Subscribe' && (
-              (() => {
-                const maxPets = (profile?.max_pets === null || profile?.max_pets === undefined) ? 0 : Number(profile.max_pets);
-                const sisa = Math.max(0, maxPets - pets.length);
-                return maxPets > 0 ? (
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sisa > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-500'}`}>
-                    {sisa > 0 ? `${sisa} slot tersisa` : 'slot penuh'}
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-500">slot terkunci</span>
-                );
-              })()
-            )}
           </h3>
           {canAdd ? (
             <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
               <Plus size={12} /> Tambah
             </button>
           ) : (
-            <span title="Slot hewan terkunci. Hubungi admin." className="flex items-center gap-1 text-xs bg-slate-100 text-slate-400 px-3 py-1.5 rounded-xl font-bold cursor-not-allowed select-none">
-              <Lock size={12} /> Tambah
+            <span title="Hanya admin yang dapat menambahkan hewan." className="flex items-center gap-1 text-xs bg-amber-50 text-amber-500 border border-amber-200 px-3 py-1.5 rounded-xl font-semibold cursor-not-allowed select-none">
+              <Lock size={12} /> Admin Only
             </span>
           )}
         </div>
@@ -4655,7 +4636,7 @@ const MonitorPage = ({ pets, selectedPet, setSelectedPet, darkMode = false, prof
 const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
   const TABS = [
     { id: 'accounts', label: 'Akun', icon: Users },
-    { id: 'slots',    label: 'Slot Hewan', icon: Sliders },
+    { id: 'pets',     label: 'Tambah Hewan', icon: PawPrint },
     { id: 'iot',      label: 'ID IoT', icon: Database },
   ];
 
@@ -4675,9 +4656,10 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
   const [editIotPetId, setEditIotPetId] = useState(null);
   const [editIotValue, setEditIotValue] = useState('');
 
-  // Edit slot state
-  const [editSlotUserId, setEditSlotUserId] = useState(null);
-  const [editSlotValue, setEditSlotValue] = useState(3);
+  // Tambah Hewan state (admin add pet for user)
+  const [addPetUserId, setAddPetUserId] = useState('');
+  const [addPetForm, setAddPetForm] = useState({ name: '', species: 'Kucing', breed: '', age: '1', age_unit: 'tahun', weight: '1', gender: 'Jantan', color: '', notes: '' });
+  const [addPetLoading, setAddPetLoading] = useState(false);
 
   // Confirm delete
   const [confirmDelete, setConfirmDelete] = useState(null); // {type:'user'|'pet', id, name}
@@ -4744,20 +4726,6 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
     }
   };
 
-  const handleSaveSlot = async (userId, val) => {
-    const num = Math.max(0, Math.min(20, Number(val)));
-    setUpdating(userId + '_slot');
-    try {
-      await adminService.updateMaxPets(userId, num);
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, max_pets: num } : u));
-      showToast(`Slot hewan diubah menjadi ${num}.`);
-      setEditSlotUserId(null);
-    } catch (e) {
-      showToast('Gagal mengubah slot. Pastikan kolom max_pets ada di tabel profiles.', 'error');
-    } finally {
-      setUpdating(null);
-    }
-  };
 
   const handleSaveIot = async (petId, val) => {
     setUpdating(petId + '_iot');
@@ -4893,64 +4861,137 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
     </div>
   );
 
-  const renderSlots = () => (
-    <div className="space-y-4">
-      <p className="text-xs text-slate-500">Atur batas maksimal jumlah hewan yang bisa ditambahkan tiap pengguna.</p>
-      {loading ? (
-        <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 size={22} className="animate-spin mr-2"/> Memuat…</div>
-      ) : users.length === 0 ? (
-        <div className="text-center py-10 text-slate-400 text-sm">Belum ada pengguna.</div>
-      ) : (
-        <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-          {users.map(user => {
-            const petCount = allPets.filter(p => p.user_id === user.id).length;
-            const maxPets  = user.max_pets ?? 3;
-            const isEditing = editSlotUserId === user.id;
-            return (
-              <div key={user.id} className="flex items-center gap-3 p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shrink-0">
-                  <span className="text-white text-sm font-bold">{(user.name || '?')[0].toUpperCase()}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 text-sm truncate">{user.name || '(tanpa nama)'}</p>
-                  <p className="text-xs text-slate-400">{petCount} / {maxPets} hewan terpakai</p>
-                </div>
-                {/* Progress bar */}
-                <div className="hidden sm:block w-24">
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-400 rounded-full transition-all" style={{width: `${Math.min(100, (petCount/Math.max(maxPets,1))*100)}%`}}/>
-                  </div>
-                </div>
-                {isEditing ? (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <input type="number" min="0" max="20" value={editSlotValue}
-                      onChange={e => setEditSlotValue(e.target.value)}
-                      className="w-14 text-sm text-center px-2 py-1 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" />
-                    <button onClick={() => handleSaveSlot(user.id, editSlotValue)} disabled={updating === user.id + '_slot'}
-                      className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-60">
-                      {updating === user.id + '_slot' ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
-                    </button>
-                    <button onClick={() => setEditSlotUserId(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"><X size={13}/></button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-black text-slate-700 w-6 text-center">{maxPets}</span>
-                    <button onClick={() => { setEditSlotUserId(user.id); setEditSlotValue(maxPets); }}
-                      className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-colors" title="Edit slot">
-                      <Sliders size={14}/>
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+  const renderAddPet = () => {
+    const handleSubmitAddPet = async (e) => {
+      e.preventDefault();
+      if (!addPetUserId) { showToast('Pilih pengguna terlebih dahulu.', 'error'); return; }
+      if (!addPetForm.name || !addPetForm.breed) { showToast('Nama dan ras hewan wajib diisi.', 'error'); return; }
+      setAddPetLoading(true);
+      try {
+        const { age_unit, ...petData } = addPetForm;
+        const newPet = await petService.create(addPetUserId, petData);
+        setAllPets(prev => [...prev, { ...newPet, user_id: addPetUserId }]);
+        showToast(`${addPetForm.name} berhasil ditambahkan!`);
+        setAddPetForm({ name: '', species: 'Kucing', breed: '', age: '1', age_unit: 'tahun', weight: '1', gender: 'Jantan', color: '', notes: '' });
+        setAddPetUserId('');
+      } catch (e) {
+        showToast('Gagal menambahkan hewan: ' + (e.message || ''), 'error');
+      } finally {
+        setAddPetLoading(false);
+      }
+    };
+
+    const selectedUserPets = allPets.filter(p => p.user_id === addPetUserId);
+    const selectedUserName = users.find(u => u.id === addPetUserId)?.name || '';
+
+    return (
+      <div className="space-y-5">
+        <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-100">
+          <p className="text-xs text-indigo-700 leading-relaxed">
+            <strong>🛡️ Fitur Admin:</strong> Hanya admin yang dapat menambahkan hewan untuk pengguna. Pilih pengguna lalu isi data hewan.
+          </p>
         </div>
-      )}
-      <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-100">
-        <p className="text-xs text-emerald-700 leading-relaxed"><strong>ℹ️ Catatan:</strong> Tambahkan kolom <code className="bg-emerald-100 px-1 rounded">max_pets integer default 3</code> ke tabel <code className="bg-emerald-100 px-1 rounded">profiles</code> agar fitur ini berfungsi.</p>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 size={22} className="animate-spin mr-2"/> Memuat…</div>
+        ) : (
+          <form onSubmit={handleSubmitAddPet} className="space-y-4">
+            {/* Pilih Pengguna */}
+            <div>
+              <label className="label-style text-xs font-bold text-slate-600 block mb-1.5">Pilih Pengguna</label>
+              <select value={addPetUserId} onChange={e => setAddPetUserId(e.target.value)}
+                className="input-style w-full text-sm" required>
+                <option value="">-- Pilih pengguna --</option>
+                {users.filter(u => u.role !== 'Admin').map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || '(tanpa nama)'} — {u.role} ({allPets.filter(p => p.user_id === u.id).length} hewan)
+                  </option>
+                ))}
+              </select>
+              {addPetUserId && (
+                <p className="text-xs text-indigo-600 mt-1 font-semibold">
+                  Hewan milik {selectedUserName}: {selectedUserPets.map(p => p.name).join(', ') || 'belum ada'}
+                </p>
+              )}
+            </div>
+
+            {/* Form Data Hewan */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+              <p className="text-xs font-black text-slate-600 uppercase tracking-wide">Data Hewan</p>
+              <div>
+                <label className="label-style text-xs block mb-1">Nama Panggilan</label>
+                <input required type="text" placeholder="Luna, Max, dsb..." value={addPetForm.name}
+                  onChange={e => setAddPetForm({ ...addPetForm, name: e.target.value })}
+                  className="input-style w-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-style text-xs block mb-1">Spesies</label>
+                  <select value={addPetForm.species} onChange={e => setAddPetForm({ ...addPetForm, species: e.target.value })} className="input-style w-full">
+                    {Object.keys(PET_ICONS).map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-style text-xs block mb-1">Gender</label>
+                  <select value={addPetForm.gender} onChange={e => setAddPetForm({ ...addPetForm, gender: e.target.value })} className="input-style w-full">
+                    <option>Jantan</option><option>Betina</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="label-style text-xs block mb-1">Jenis Ras</label>
+                <input required type="text" placeholder="Persian, Golden, dsb..." value={addPetForm.breed}
+                  onChange={e => setAddPetForm({ ...addPetForm, breed: e.target.value })}
+                  className="input-style w-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-style text-xs block mb-1">Usia (tahun)</label>
+                  <input type="number" min="0" step="0.5" value={addPetForm.age}
+                    onChange={e => setAddPetForm({ ...addPetForm, age: e.target.value })}
+                    className="input-style w-full" />
+                </div>
+                <div>
+                  <label className="label-style text-xs block mb-1">Berat (kg)</label>
+                  <input type="number" min="0" step="0.01" value={addPetForm.weight}
+                    onChange={e => setAddPetForm({ ...addPetForm, weight: e.target.value })}
+                    className="input-style w-full" />
+                </div>
+              </div>
+              <div>
+                <label className="label-style text-xs block mb-1">Warna</label>
+                <input type="text" placeholder="Putih, hitam, dsb..." value={addPetForm.color}
+                  onChange={e => setAddPetForm({ ...addPetForm, color: e.target.value })}
+                  className="input-style w-full" />
+              </div>
+              <div>
+                <label className="label-style text-xs block mb-1">Catatan (opsional)</label>
+                <textarea value={addPetForm.notes} onChange={e => setAddPetForm({ ...addPetForm, notes: e.target.value })}
+                  rows={2} className="input-style w-full resize-none" />
+              </div>
+            </div>
+
+            {/* Preview */}
+            {addPetForm.name && (
+              <div className="p-3 bg-white rounded-2xl border border-slate-100 flex items-center gap-3">
+                <PetAvatar species={addPetForm.species} size="md" />
+                <div>
+                  <p className="font-bold text-slate-700">{addPetForm.name}</p>
+                  <p className="text-xs text-slate-400">{addPetForm.species} · {addPetForm.breed || 'Ras'}</p>
+                  {selectedUserName && <p className="text-xs text-indigo-500 font-semibold">untuk: {selectedUserName}</p>}
+                </div>
+              </div>
+            )}
+
+            <button type="submit" disabled={addPetLoading || !addPetUserId}
+              className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm">
+              {addPetLoading ? <><Loader2 size={15} className="animate-spin"/>Menyimpan...</> : <><Plus size={15}/>Tambahkan Hewan</>}
+            </button>
+          </form>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderIot = () => {
     const petsWithUser = allPets.map(p => ({
@@ -5107,7 +5148,7 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
         {/* Tab Content */}
         <div className="p-5">
           {activeAdminTab === 'accounts' && renderAccounts()}
-          {activeAdminTab === 'slots'    && renderSlots()}
+          {activeAdminTab === 'pets'     && renderAddPet()}
           {activeAdminTab === 'iot'      && renderIot()}
         </div>
       </div>
@@ -5345,11 +5386,11 @@ export default function App() {
     return false;
   };
 
-  const handleAddPet = async (form) => {
+  const handleAddPet = async (form, targetUserId = null) => {
     if (demoGuard()) return;
-    // Guard slot hewan untuk akun Subscribe
-    if (!canAddPet(profile, pets.length)) {
-      showToast('Slot hewan penuh atau belum diaktifkan. Hubungi admin untuk menambah slot.', 'error');
+    // Guard: hanya admin yang boleh menambah hewan
+    if (!canAddPet(profile)) {
+      showToast('Hanya admin yang dapat menambahkan hewan. Hubungi admin.', 'error');
       return;
     }
     setPetLoading(true);
@@ -5624,7 +5665,7 @@ export default function App() {
           )}
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} canAdd={canAddPet(profile, pets.length)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
+              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} canAdd={canAddPet(profile)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} profile={profile} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
