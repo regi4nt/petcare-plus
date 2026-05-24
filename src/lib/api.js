@@ -563,7 +563,7 @@ export const adminService = {
   async getAllProfiles() {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, name, phone, role, created_at, login_streak, last_login_date')
+      .select('id, name, phone, role, max_pets, created_at, login_streak, last_login_date')
       .order('created_at', { ascending: false });
     if (error) {
       console.error('[adminService.getAllProfiles] RLS error:', error.message);
@@ -615,12 +615,40 @@ Object.assign(adminService, {
   },
 
   async getAllPets() {
-    const { data, error } = await supabase
+    // Ambil data pets beserta device_id terbaru dari monitoring (jika kolom iot_device_id belum ada di pets)
+    const { data: petsData, error: petsErr } = await supabase
       .from('pets')
-      .select('id, name, species, breed, user_id, iot_device_id, created_at')
+      .select('id, name, species, breed, user_id, created_at')
       .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data || [];
+    if (petsErr) throw petsErr;
+    const pets = petsData || [];
+
+    // Coba ambil kolom iot_device_id jika sudah ada (migrasi sudah dijalankan)
+    const { data: iotData } = await supabase
+      .from('pets')
+      .select('id, iot_device_id')
+      .not('iot_device_id', 'is', null);
+
+    const iotMap = {};
+    (iotData || []).forEach(p => { if (p.iot_device_id) iotMap[p.id] = p.iot_device_id; });
+
+    // Fallback: ambil device_id terbaru dari monitoring per pet
+    const { data: monData } = await supabase
+      .from('monitoring')
+      .select('pet_id, device_id, created_at')
+      .order('created_at', { ascending: false });
+    (monData || []).forEach(m => {
+      if (m.pet_id && m.device_id && !iotMap[m.pet_id]) {
+        iotMap[m.pet_id] = m.device_id;
+      }
+    });
+
+    // iot_from_db = true  → nilai dari kolom iot_device_id di tabel pets (bisa diedit)
+    // iot_from_db = false → nilai dari monitoring terbaru (read-only, hanya info)
+    return pets.map(p => {
+      const fromDb = (iotData || []).some(d => d.id === p.id && d.iot_device_id);
+      return { ...p, iot_device_id: iotMap[p.id] || null, iot_from_db: fromDb };
+    });
   },
 
   async updatePetIotId(petId, iotDeviceId) {
@@ -628,9 +656,15 @@ Object.assign(adminService, {
       .from('pets')
       .update({ iot_device_id: iotDeviceId || null })
       .eq('id', petId)
-      .select()
+      .select('id, iot_device_id')
       .single();
-    if (error) throw error;
+    if (error) {
+      // Kolom iot_device_id belum ada — arahkan admin untuk menjalankan migrasi
+      if (error.message?.includes('column') || error.code === '42703') {
+        throw new Error('Kolom iot_device_id belum ada. Jalankan migrasi SQL: ALTER TABLE pets ADD COLUMN iot_device_id text;');
+      }
+      throw error;
+    }
     return data;
   },
 

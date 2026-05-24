@@ -4950,6 +4950,10 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
           <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
             {petsWithUser.map(pet => {
               const isEditing = editIotPetId === pet.id;
+              // iot_from_db = kolom iot_device_id sudah ada & terisi → bisa diedit
+              // Jika belum ada kolom, iot_device_id diisi dari monitoring (read-only, badge abu)
+              const iotSaved   = pet.iot_from_db && pet.iot_device_id;
+              const iotDetected = !pet.iot_from_db && pet.iot_device_id;
               return (
                 <div key={pet.id} className="p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
                   <div className="flex items-center gap-3">
@@ -4961,9 +4965,13 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
                       <p className="text-xs text-slate-400 truncate">👤 {pet.userName}</p>
                     </div>
                     {/* IoT badge */}
-                    {pet.iot_device_id ? (
+                    {iotSaved ? (
                       <span className="hidden sm:flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-mono font-semibold shrink-0">
                         <Wifi size={11}/>{pet.iot_device_id}
+                      </span>
+                    ) : iotDetected ? (
+                      <span className="hidden sm:flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-mono font-semibold shrink-0" title="Terdeteksi dari data monitoring, belum dikunci ke hewan ini">
+                        <Radio size={11}/>{pet.iot_device_id}
                       </span>
                     ) : (
                       <span className="hidden sm:flex items-center gap-1 text-xs bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full shrink-0">
@@ -4973,8 +4981,8 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
                     <div className="flex items-center gap-1 shrink-0">
                       {!isEditing && (
                         <>
-                          <button onClick={() => { setEditIotPetId(pet.id); setEditIotValue(pet.iot_device_id || ''); }}
-                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors" title="Edit IoT ID">
+                          <button onClick={() => { setEditIotPetId(pet.id); setEditIotValue(iotSaved ? pet.iot_device_id : ''); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors" title="Set ID IoT">
                             <Link2 size={14}/>
                           </button>
                           <button onClick={() => setConfirmDelete({ id: pet.id, name: pet.name })}
@@ -4986,25 +4994,32 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
                     </div>
                   </div>
                   {isEditing && (
-                    <div className="mt-3 flex items-center gap-2">
-                      <Hash size={14} className="text-slate-400 shrink-0"/>
-                      <input
-                        className="flex-1 text-sm font-mono px-3 py-1.5 rounded-xl border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        placeholder="ID perangkat (mis. esp32-01)"
-                        value={editIotValue}
-                        onChange={e => setEditIotValue(e.target.value)}
-                      />
-                      <button onClick={() => handleSaveIot(pet.id, editIotValue)} disabled={updating === pet.id + '_iot'}
-                        className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-60">
-                        {updating === pet.id + '_iot' ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
-                      </button>
-                      <button onClick={() => setEditIotPetId(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"><X size={13}/></button>
+                    <div className="mt-3 space-y-2">
+                      {iotDetected && (
+                        <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-xl px-3 py-1.5 flex items-center gap-1.5">
+                          <Radio size={11}/> Terdeteksi dari monitoring: <span className="font-mono font-bold">{pet.iot_device_id}</span>. Ketik di bawah untuk menguncinya ke hewan ini.
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Hash size={14} className="text-slate-400 shrink-0"/>
+                        <input
+                          className="flex-1 text-sm font-mono px-3 py-1.5 rounded-xl border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          placeholder={iotDetected ? pet.iot_device_id : 'ID perangkat (mis. esp32-01)'}
+                          value={editIotValue}
+                          onChange={e => setEditIotValue(e.target.value)}
+                        />
+                        <button onClick={() => handleSaveIot(pet.id, editIotValue)} disabled={updating === pet.id + '_iot'}
+                          className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-60">
+                          {updating === pet.id + '_iot' ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
+                        </button>
+                        <button onClick={() => setEditIotPetId(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"><X size={13}/></button>
+                      </div>
                     </div>
                   )}
                   {/* Mobile IoT badge */}
-                  {pet.iot_device_id && (
-                    <div className="sm:hidden mt-2 flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded-xl font-mono font-semibold">
-                      <Wifi size={11}/>{pet.iot_device_id}
+                  {(iotSaved || iotDetected) && (
+                    <div className={`sm:hidden mt-2 flex items-center gap-1 text-xs px-2 py-1 rounded-xl font-mono font-semibold border ${iotSaved ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      {iotSaved ? <Wifi size={11}/> : <Radio size={11}/>}{pet.iot_device_id}
                     </div>
                   )}
                 </div>
