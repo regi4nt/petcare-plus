@@ -51,8 +51,12 @@ const canAddPet = (profile, petsCount) => {
   if (!profile) return false;
   if (profile.role === ROLES.ADMIN) return true;
   if (profile.role === ROLES.DEMO) return false;
-  const maxPets = profile.max_pets ?? 0;
-  return maxPets > 0 && petsCount < maxPets;
+  // Subscribe: cek slot yang diberikan admin.
+  // Kolom max_pets: null / undefined / 0 = belum diatur → terkunci.
+  // Hanya integer > 0 yang membuka akses.
+  const rawSlot = profile.max_pets;
+  const maxPets = (rawSlot === null || rawSlot === undefined) ? 0 : Number(rawSlot);
+  return Number.isFinite(maxPets) && maxPets > 0 && petsCount < maxPets;
 };
 
 // ─── DEMO DATA (Simulasi untuk akun Demo) ─────────────────────────────
@@ -1407,7 +1411,7 @@ const callAiProvider = async (provider, messages) => {
 
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────
-const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, canAdd = true, notifications, records, onAlert, onUpdatePet, onDeletePet, streak = 0, profile }) => {
+const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, canAdd = false, notifications, records, onAlert, onUpdatePet, onDeletePet, streak = 0, profile }) => {
   const [iotCalc, setIotCalc]         = useState(null);
   const [dailyHealth, setDailyHealth] = useState([]);
   const [iotLoading, setIotLoading]   = useState(false);
@@ -1783,6 +1787,20 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, canAdd = true,
           <h3 className="font-bold text-slate-700 text-sm flex items-center gap-2">
             Hewan Peliharaan
             <span className="bg-indigo-100 text-indigo-600 text-[10px] font-black px-2 py-0.5 rounded-full">{pets.length}</span>
+            {/* Slot counter — tampil hanya untuk Subscribe */}
+            {profile?.role === 'Subscribe' && (
+              (() => {
+                const maxPets = (profile?.max_pets === null || profile?.max_pets === undefined) ? 0 : Number(profile.max_pets);
+                const sisa = Math.max(0, maxPets - pets.length);
+                return maxPets > 0 ? (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sisa > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-500'}`}>
+                    {sisa > 0 ? `${sisa} slot tersisa` : 'slot penuh'}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-500">slot terkunci</span>
+                );
+              })()
+            )}
           </h3>
           {canAdd ? (
             <button onClick={onAddPet} className="flex items-center gap-1 text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">
