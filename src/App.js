@@ -4641,6 +4641,7 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
   const TABS = [
     { id: 'accounts', label: 'Akun', icon: Users },
     { id: 'pets',     label: 'Tambah Hewan', icon: PawPrint },
+    { id: 'limits',   label: 'Kelola Limit', icon: Sliders },
     { id: 'iot',      label: 'ID IoT', icon: Database },
   ];
 
@@ -4664,6 +4665,10 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
   const [addPetUserId, setAddPetUserId] = useState('');
   const [addPetForm, setAddPetForm] = useState({ name: '', species: 'Kucing', breed: '', age: '1', age_unit: 'tahun', weight: '1', gender: 'Jantan', color: '', notes: '' });
   const [addPetLoading, setAddPetLoading] = useState(false);
+
+  // Kelola Limit state
+  const [editLimitUserId, setEditLimitUserId] = useState(null);
+  const [editLimitValue, setEditLimitValue] = useState(3);
 
   // Confirm delete
   const [confirmDelete, setConfirmDelete] = useState(null); // {type:'user'|'pet', id, name}
@@ -4997,6 +5002,95 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
     );
   };
 
+  const handleSaveLimit = async (userId, val) => {
+    const num = Math.max(0, Math.min(50, Number(val)));
+    setUpdating(userId + '_limit');
+    try {
+      await adminService.updateMaxPets(userId, num);
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, max_pets: num } : u));
+      showToast(`Limit hewan diubah menjadi ${num}.`);
+      setEditLimitUserId(null);
+    } catch (e) {
+      showToast('Gagal mengubah limit.', 'error');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const renderLimits = () => {
+    const nonAdminUsers = users.filter(u => u.role !== 'Admin');
+    return (
+      <div className="space-y-4">
+        <p className="text-xs text-slate-500">Atur batas maksimal jumlah hewan yang bisa dimiliki tiap pengguna. Pengguna tidak bisa menambah hewan sendiri — admin yang menambahkan.</p>
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 size={22} className="animate-spin mr-2"/> Memuat…</div>
+        ) : nonAdminUsers.length === 0 ? (
+          <div className="text-center py-10 text-slate-400 text-sm">Belum ada pengguna non-Admin.</div>
+        ) : (
+          <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+            {nonAdminUsers.map(user => {
+              const petCount = allPets.filter(p => p.user_id === user.id).length;
+              const maxPets  = user.max_pets ?? 0;
+              const isEditing = editLimitUserId === user.id;
+              const pct = maxPets > 0 ? Math.min(100, (petCount / maxPets) * 100) : 0;
+              const isFull = maxPets > 0 && petCount >= maxPets;
+              return (
+                <div key={user.id} className="p-3 rounded-2xl border border-slate-100 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center shrink-0">
+                      <span className="text-white text-sm font-bold">{(user.name || '?')[0].toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 text-sm truncate">{user.name || '(tanpa nama)'}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${user.role === 'Subscribe' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'}`}>{user.role}</span>
+                        <span className={`text-xs ${isFull ? 'text-rose-500 font-bold' : 'text-slate-400'}`}>
+                          {maxPets === 0 ? '— belum ada limit' : `${petCount} / ${maxPets} hewan`}
+                        </span>
+                      </div>
+                      {/* Progress bar */}
+                      {maxPets > 0 && (
+                        <div className="mt-1.5 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${isFull ? 'bg-rose-400' : 'bg-indigo-400'}`} style={{ width: `${pct}%` }}/>
+                        </div>
+                      )}
+                    </div>
+                    {/* Edit / display */}
+                    {isEditing ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <input type="number" min="0" max="50" value={editLimitValue}
+                          onChange={e => setEditLimitValue(e.target.value)}
+                          className="w-14 text-sm text-center px-2 py-1.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                        <button onClick={() => handleSaveLimit(user.id, editLimitValue)} disabled={updating === user.id + '_limit'}
+                          className="w-8 h-8 flex items-center justify-center rounded-xl bg-indigo-500 text-white hover:bg-indigo-600 transition-colors disabled:opacity-60">
+                          {updating === user.id + '_limit' ? <Loader2 size={13} className="animate-spin"/> : <Check size={13}/>}
+                        </button>
+                        <button onClick={() => setEditLimitUserId(null)} className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"><X size={13}/></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-sm font-black w-6 text-center ${maxPets === 0 ? 'text-slate-300' : 'text-slate-700'}`}>{maxPets === 0 ? '–' : maxPets}</span>
+                        <button onClick={() => { setEditLimitUserId(user.id); setEditLimitValue(maxPets || 0); }}
+                          className="w-8 h-8 flex items-center justify-center rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 transition-colors" title="Edit limit">
+                          <Sliders size={14}/>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="p-3 bg-indigo-50 rounded-2xl border border-indigo-100">
+          <p className="text-xs text-indigo-700 leading-relaxed">
+            <strong>ℹ️ Catatan:</strong> Limit = jumlah maksimal hewan yang boleh dimiliki pengguna. Set ke <strong>0</strong> berarti tidak ada hewan yang diizinkan. Penambahan hewan tetap dilakukan oleh admin melalui tab <strong>Tambah Hewan</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   const renderIot = () => {
     const petsWithUser = allPets.map(p => ({
       ...p,
@@ -5153,6 +5247,7 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
         <div className="p-5">
           {activeAdminTab === 'accounts' && renderAccounts()}
           {activeAdminTab === 'pets'     && renderAddPet()}
+          {activeAdminTab === 'limits'   && renderLimits()}
           {activeAdminTab === 'iot'      && renderIot()}
         </div>
       </div>

@@ -1,66 +1,55 @@
 -- =====================================================
 -- MIGRATION: Admin RLS — Izinkan Admin Kelola Hewan Semua Pengguna
--- 
--- Masalah  : "new row violates row-level security policy for table 'pets'"
---            Terjadi saat admin mencoba menambah hewan untuk user lain.
--- Penyebab : Policy lama hanya izinkan user insert/update pet miliknya sendiri
---            (auth.uid() = user_id), sehingga admin yang memasukkan pet dengan
---            user_id berbeda akan ditolak oleh RLS.
--- Solusi   : Ganti policy "pets: own" dengan policy terpisah per operasi,
---            tambahkan pengecualian untuk role Admin.
+-- Fix: gunakan EXISTS() agar kompatibel dengan PostgreSQL Supabase
 --
--- Jalankan SELURUH script ini di:
+-- Jalankan di:
 -- Supabase Dashboard > SQL Editor > New Query > Run
 -- =====================================================
 
--- ─── STEP 1: Hapus policy lama yang terlalu ketat ───────────────────
-DROP POLICY IF EXISTS "pets: own" ON pets;
+-- ─── STEP 1: Hapus policy lama ──────────────────────────────────────
+DROP POLICY IF EXISTS "pets: own"           ON pets;
+DROP POLICY IF EXISTS "pets_select_policy"  ON pets;
+DROP POLICY IF EXISTS "pets_insert_policy"  ON pets;
+DROP POLICY IF EXISTS "pets_update_policy"  ON pets;
+DROP POLICY IF EXISTS "pets_delete_policy"  ON pets;
 
--- ─── STEP 2: Buat policy baru — SELECT ──────────────────────────────
--- User bisa lihat pet miliknya sendiri.
--- Admin bisa lihat semua pet.
+-- ─── STEP 2: Helper function cek Admin ──────────────────────────────
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid() AND role = 'Admin'
+  );
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+-- ─── STEP 3: Policy baru — SELECT ───────────────────────────────────
 CREATE POLICY "pets_select_policy" ON pets
   FOR SELECT USING (
-    auth.uid() = user_id
-    OR (
-      SELECT role FROM profiles WHERE id = auth.uid()
-    ) = 'Admin'
+    auth.uid() = user_id OR is_admin()
   );
 
--- ─── STEP 3: Buat policy baru — INSERT ──────────────────────────────
--- User biasa hanya bisa insert pet untuk dirinya sendiri (user_id = auth.uid()).
--- Admin bisa insert pet untuk siapa saja (user_id bebas).
+-- ─── STEP 4: Policy baru — INSERT ───────────────────────────────────
 CREATE POLICY "pets_insert_policy" ON pets
   FOR INSERT WITH CHECK (
-    auth.uid() = user_id
-    OR (
-      SELECT role FROM profiles WHERE id = auth.uid()
-    ) = 'Admin'
+    auth.uid() = user_id OR is_admin()
   );
 
--- ─── STEP 4: Buat policy baru — UPDATE ──────────────────────────────
--- User biasa hanya bisa update pet miliknya sendiri.
--- Admin bisa update pet siapa saja.
+-- ─── STEP 5: Policy baru — UPDATE ───────────────────────────────────
 CREATE POLICY "pets_update_policy" ON pets
   FOR UPDATE USING (
-    auth.uid() = user_id
-    OR (
-      SELECT role FROM profiles WHERE id = auth.uid()
-    ) = 'Admin'
+    auth.uid() = user_id OR is_admin()
+  ) WITH CHECK (
+    auth.uid() = user_id OR is_admin()
   );
 
--- ─── STEP 5: Buat policy baru — DELETE ──────────────────────────────
--- User biasa hanya bisa hapus pet miliknya sendiri.
--- Admin bisa hapus pet siapa saja.
+-- ─── STEP 6: Policy baru — DELETE ───────────────────────────────────
 CREATE POLICY "pets_delete_policy" ON pets
   FOR DELETE USING (
-    auth.uid() = user_id
-    OR (
-      SELECT role FROM profiles WHERE id = auth.uid()
-    ) = 'Admin'
+    auth.uid() = user_id OR is_admin()
   );
 
--- ─── VERIFIKASI: cek policy aktif di tabel pets ─────────────────────
-SELECT policyname, cmd, qual
+-- ─── VERIFIKASI ─────────────────────────────────────────────────────
+SELECT policyname, cmd
 FROM pg_policies
-WHERE tablename = 'pets';
+WHERE tablename = 'pets'
+ORDER BY cmd;
