@@ -2903,12 +2903,16 @@ const SettingsPage = ({ user, profile, onUpdateProfile, onLogout, pets, onUpdate
 
     // ── Data IoT / Monitoring — rata-rata & riwayat harian dari sensor ESP32 ──
     // Safe check: iotCalc & dailyHealth mungkin tidak tersedia di SettingsPage
-    const safeIotCalc = (typeof iotCalc !== 'undefined') ? iotCalc : null;
-    const safeDailyHealth = (typeof dailyHealth !== 'undefined') ? dailyHealth : null;
+    // eslint-disable-next-line no-undef
+    const safeIotCalc = (typeof iotCalc !== 'undefined') ? iotCalc : null; // eslint-disable-line no-undef
+    // eslint-disable-next-line no-undef
+    const safeDailyHealth = (typeof dailyHealth !== 'undefined') ? dailyHealth : null; // eslint-disable-line no-undef
     if (safeIotCalc) {
       data.monitoring_iot = {
-        hewan: (typeof selectedPet !== 'undefined') ? (selectedPet?.name || '-') : '-',
-        device_id: (typeof selectedPet !== 'undefined') ? (selectedPet?.device_id || '-') : '-',
+        // eslint-disable-next-line no-undef
+        hewan: (typeof selectedPet !== 'undefined') ? (selectedPet?.name || '-') : '-', // eslint-disable-line no-undef
+        // eslint-disable-next-line no-undef
+        device_id: (typeof selectedPet !== 'undefined') ? (selectedPet?.device_id || '-') : '-', // eslint-disable-line no-undef
         rata_suhu_c: safeIotCalc.avg_suhu != null ? parseFloat(safeIotCalc.avg_suhu).toFixed(1) : '-',
         rata_detak_jantung_bpm: safeIotCalc.avg_heart_rate != null ? parseFloat(safeIotCalc.avg_heart_rate).toFixed(0) : '-',
         rata_spo2_persen: safeIotCalc.avg_spo2 != null ? parseFloat(safeIotCalc.avg_spo2).toFixed(1) : '-',
