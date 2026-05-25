@@ -42,10 +42,13 @@
 #include <esp_task_wdt.h>
 
 #include <Adafruit_MLX90614.h>
-#include <MPU6050.h>
+// MPU6050 diakses manual via I2C register (tanpa library MPU6050.h)
 #include "MAX30105.h"
 #include "spo2_algorithm.h"
 #include "heartRate.h"
+
+// ── Alamat I2C MPU6050 ────────────────────────────────────
+#define MPU_ADDR 0x68
 
 // ═══════════════════════════════════════════════════════════
 //  KONFIGURASI — WAJIB DIISI
@@ -105,6 +108,8 @@ struct SensorReading {
   char    mode[8];              // "kalung" | "kandang"
 };
 
+struct BatteryResult { float level; const char* status; };
+
 // ═══════════════════════════════════════════════════════════
 //  RTC RAM — bertahan selama Deep Sleep
 // ═══════════════════════════════════════════════════════════
@@ -120,8 +125,16 @@ RTC_DATA_ATTR int           failCount       = 0;  // Gagal kirim beruntun
 // ═══════════════════════════════════════════════════════════
 
 Adafruit_MLX90614 mlx;
-MPU6050           mpu;
 MAX30105          particleSensor;
+
+// ─── Variabel MPU6050 (manual register) ──────────────────
+int16_t accXRaw, accYRaw, accZRaw;
+int16_t tempRaw;
+int16_t gyroXRaw, gyroYRaw, gyroZRaw;
+float   mpuAccX = 0, mpuAccY = 0, mpuAccZ = 0;
+float   mpuGyroX = 0, mpuGyroY = 0, mpuGyroZ = 0;
+float   suhuChipMPU = 0;
+float   totalGerak  = 0;
 
 // ─── SpO2 algorithm buffer ───────────────────────────────
 #define SPO2_SAMPLE_SIZE 100
@@ -188,10 +201,16 @@ bool initSensors() {
     ok = false;
   }
 
-  mpu.initialize();
-  if (!mpu.testConnection()) {
+  // ── MPU6050: inisialisasi manual via register ────────────
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x6B);   // Register power management
+  Wire.write(0x00);   // Wake up MPU6050
+  byte mpuErr = Wire.endTransmission();
+  if (mpuErr != 0) {
     Serial.println("[WARN] MPU-6050 tidak terdeteksi.");
     ok = false;
+  } else {
+    Serial.println("[OK] MPU-6050 terdeteksi (manual register)");
   }
 
   if (!particleSensor.begin(Wire, I2C_SPEED_STANDARD)) {
@@ -224,7 +243,42 @@ float bacaSuhu() {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  BACA HEART RATE
+//  BACA MPU6050 MANUAL (via register I2C langsung)
+// ═══════════════════════════════════════════════════════════
+
+bool readMPU6050() {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(0x3B); // Register awal accelerometer
+  byte error = Wire.endTransmission(false);
+
+  if (error != 0) return false;
+
+  Wire.requestFrom(MPU_ADDR, 14, true);
+  if (Wire.available() == 14) {
+    accXRaw = Wire.read() << 8 | Wire.read();
+    accYRaw = Wire.read() << 8 | Wire.read();
+    accZRaw = Wire.read() << 8 | Wire.read();
+    tempRaw = Wire.read() << 8 | Wire.read();
+    gyroXRaw = Wire.read() << 8 | Wire.read();
+    gyroYRaw = Wire.read() << 8 | Wire.read();
+    gyroZRaw = Wire.read() << 8 | Wire.read();
+
+    mpuAccX = accXRaw / 16384.0;
+    mpuAccY = accYRaw / 16384.0;
+    mpuAccZ = accZRaw / 16384.0;
+
+    mpuGyroX = gyroXRaw / 131.0;
+    mpuGyroY = gyroYRaw / 131.0;
+    mpuGyroZ = gyroZRaw / 131.0;
+
+    suhuChipMPU = (tempRaw / 340.0) + 36.53;
+    totalGerak  = sqrt((mpuAccX * mpuAccX) + (mpuAccY * mpuAccY) + (mpuAccZ * mpuAccZ));
+    return true;
+  }
+  return false;
+}
+
+
 //  Baca ~2 detik worth of sample untuk mendapatkan beat
 // ═══════════════════════════════════════════════════════════
 
@@ -292,8 +346,6 @@ float bacaSpO2() {
 // ═══════════════════════════════════════════════════════════
 //  BACA BATERAI
 // ═══════════════════════════════════════════════════════════
-
-struct BatteryResult { float level; const char* status; };
 
 BatteryResult bacaBaterai() {
   long rawSum = 0;
@@ -614,7 +666,26 @@ void setup() {
   esp_task_wdt_reset();
 
   int16_t ax = 0, ay = 0, az = 0;
-  if (sensorsOk) mpu.getAcceleration(&ax, &ay, &az);
+  String statusGerak = "Tidak diketahui";
+  if (sensorsOk) {
+    if (readMPU6050()) {
+      ax = (int16_t)(mpuAccX * 16384.0);
+      ay = (int16_t)(mpuAccY * 16384.0);
+      az = (int16_t)(mpuAccZ * 16384.0);
+      if      (totalGerak < 1.20) statusGerak = "Diam / stabil";
+      else if (totalGerak < 1.80) statusGerak = "Gerak ringan";
+      else                        statusGerak = "Gerak tinggi";
+    } else {
+      statusGerak = "Data MPU gagal terbaca";
+    }
+  }
+
+  // Validasi status BPM
+  long irCheck = particleSensor.getIR();
+  String statusBPM;
+  if (irCheck < 50000)                      statusBPM = "Sensor belum menempel";
+  else if (statusGerak == "Gerak tinggi")   statusBPM = "Tidak valid (hewan banyak bergerak)";
+  else                                      statusBPM = "Valid";
 
   BatteryResult batt = bacaBaterai();
   esp_task_wdt_reset();
@@ -642,8 +713,12 @@ void setup() {
     cageMode ? "KANDANG 🏠" : "KALUNG 🐾", readingCount, BATCH_SIZE);
   Serial.printf("Suhu     : %.2f°C\n", suhu);
   Serial.printf("HR       : %.1f BPM%s\n", hr, hr == 0 ? " (tidak ada)" : "");
+  Serial.printf("Status BPM: %s\n", statusBPM.c_str());
   Serial.printf("SpO2     : %.0f%%%s\n",   spo2, spo2 == 0 ? " (tidak valid)" : "");
   Serial.printf("Accel    : X=%-5d Y=%-5d Z=%d\n", ax, ay, az);
+  Serial.printf("Total Gerak: %.4f | Status: %s\n", totalGerak, statusGerak.c_str());
+  Serial.printf("Gyro     : X=%.2f Y=%.2f Z=%.2f deg/s\n", mpuGyroX, mpuGyroY, mpuGyroZ);
+  Serial.printf("Suhu Chip MPU: %.2f°C\n", suhuChipMPU);
   Serial.printf("Baterai  : %.1f%% | %s\n", batt.level, batt.status);
 
   // ═══════════════════════════════════════════════════════

@@ -5340,6 +5340,24 @@ export default function App() {
     localStorage.setItem('petcare_notif', JSON.stringify(updated));
   }, []);
 
+  // ── Throttle notifikasi IoT: maks 1x per hewan per 24 jam ────────────
+  const IOT_NOTIF_KEY = 'petcare_iot_notif_ts'; // { [pet_id]: timestamp }
+  const canSendIotNotif = useCallback((petId) => {
+    try {
+      const store = JSON.parse(localStorage.getItem(IOT_NOTIF_KEY) || '{}');
+      const last  = store[petId];
+      if (!last) return true;
+      return (Date.now() - last) > 24 * 60 * 60 * 1000; // lebih dari 24 jam
+    } catch { return true; }
+  }, []);
+  const markIotNotifSent = useCallback((petId) => {
+    try {
+      const store = JSON.parse(localStorage.getItem(IOT_NOTIF_KEY) || '{}');
+      store[petId] = Date.now();
+      localStorage.setItem(IOT_NOTIF_KEY, JSON.stringify(store));
+    } catch {}
+  }, []);
+
   // Push notification ke device untuk pengingat jadwal
   usePushNotifications(schedules, pets, notifSettings);
 
@@ -5764,7 +5782,14 @@ export default function App() {
           )}
           {dataLoading ? <Spinner text="Memuat data dari Supabase..." /> : (
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} canAdd={canAddPet(profile)} notifications={notifications} records={records} onAlert={(payload) => { if (payload.source === 'iot-health' && !notifSettings.kesehatan) return; addNotif(session.user.id, payload); }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
+              {activeTab === 'dashboard' && <Dashboard pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} onAddPet={() => setShowAddPet(true)} canAdd={canAddPet(profile)} notifications={notifications} records={records} onAlert={(payload) => {
+                  if (payload.source === 'iot-health' && !notifSettings.kesehatan) return;
+                  if (payload.source === 'iot-health') {
+                    if (!canSendIotNotif(payload.pet_id)) return; // sudah notif dalam 24 jam
+                    markIotNotifSent(payload.pet_id);
+                  }
+                  addNotif(session.user.id, payload);
+                }} onUpdatePet={handleUpdatePet} onDeletePet={handleDeletePet} streak={streak} profile={profile} />}
               {activeTab === 'monitor'   && <MonitorPage pets={pets} selectedPet={selectedPet} setSelectedPet={setSelectedPet} darkMode={darkMode} profile={profile} />}
               {activeTab === 'schedule' && <SchedulePage pets={pets} schedules={schedules} onAdd={handleAddSchedule} onToggle={handleToggleSchedule} onDelete={handleDeleteSchedule} darkMode={darkMode} />}
               {activeTab === 'medical' && <MedicalPage pets={pets} records={records} onAdd={handleAddRecord} onDelete={handleDeleteRecord} darkMode={darkMode} />}
