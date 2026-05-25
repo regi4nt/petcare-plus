@@ -343,13 +343,19 @@ export const monitoringService = {
    * @param {number} limit - jumlah pembacaan yang dikalkulasi (default: 20)
    * @returns {{ avg_suhu, avg_heart_rate, avg_spo2, latest_mode, reading_count, last_reading_at, ax_history } | null}
    */
-  async getCalculated(petId, limit = 20) {
-    const { data, error } = await supabase
+  async getCalculated(petId, limit = 20, since = null) {
+    let query = supabase
       .from('monitoring')
       .select('suhu, heart_rate, spo2, ax, ay, az, mode, battery_level, battery_status, created_at')
       .eq('pet_id', petId)
       .order('created_at', { ascending: false })
       .limit(limit);
+
+    // Hanya ambil data sejak ESP32 terakhir diaktifkan ke hewan ini.
+    // Mencegah data lama muncul saat ESP32 dialihkan dari hewan sebelumnya.
+    if (since) query = query.gte('created_at', since);
+
+    const { data, error } = await query;
     if (error) throw error;
     if (!data || data.length === 0) return null;
 

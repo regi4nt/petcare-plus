@@ -10,7 +10,7 @@
     • Simpan ke buffer RTC RAM (bertahan selama Deep Sleep)
     • WiFi TETAP MATI → langsung tidur kembali
 
-  Siklus Pengiriman Batch       : setiap 15 menit (15 data)
+  Siklus Pengiriman Batch       : setiap 10 menit (10 data)
     • Setelah 15 data terkumpul di buffer RTC RAM
     • Hidupkan WiFi → POST 1 request (array JSON 15 baris)
     • Polling perintah (hibernate / resume / restart)
@@ -60,8 +60,13 @@ const char* WIFI_PASSWORD     = "pondokmarhen";
 const char* SUPABASE_URL      = "https://vpytcguxghpvvsrqdsoc.supabase.co";
 const char* SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZweXRjZ3V4Z2hwdnZzcnFkc29jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTIzMTIsImV4cCI6MjA5MjY4ODMxMn0.-98m71uyb_Uf1x7VC1LM6Q6dPlja-FDuQQl0wXOqfTQ";
 
-const char* PET_ID            = "57bed84e-303d-4dda-9d2b-357f97284562";
 const char* DEVICE_ID         = "esp32-01";
+
+// PET_ID disimpan di RTC memory agar bertahan saat deep sleep
+// dan bisa diubah dari dashboard via command 'set_pet'
+// Isi DEFAULT_PET_ID dengan UUID hewan default dari Supabase
+#define DEFAULT_PET_ID "57bed84e-303d-4dda-9d2b-357f97284562"
+RTC_DATA_ATTR char activePetId[64] = DEFAULT_PET_ID;
 
 // ═══════════════════════════════════════════════════════════
 //  PIN DEFINITION
@@ -83,7 +88,7 @@ const char* DEVICE_ID         = "esp32-01";
 
 #define SLEEP_DURATION_NORMAL_US   (60ULL * 1000000ULL)   // 1 menit
 #define SLEEP_DURATION_HIBERNATE_US (60ULL * 1000000ULL)  // 1 menit (skip sensor)
-#define BATCH_SIZE                 15    // Kirim setiap 15 pembacaan
+#define BATCH_SIZE                 10    // Kirim setiap 10 pembacaan (kompromi hemat baterai & aman ganti hewan)
 #define WDT_TIMEOUT_MS             30000 // 30 detik
 
 // ═══════════════════════════════════════════════════════════
@@ -425,7 +430,7 @@ bool batchUpload() {
 
   for (int i = 0; i < readingCount; i++) {
     JsonObject obj = arr.createNestedObject();
-    obj["pet_id"]         = PET_ID;
+    obj["pet_id"]         = activePetId;
     obj["device_id"]      = DEVICE_ID;
     obj["batch_id"]       = batchId;        // Semua baris dalam batch punya UUID sama
     obj["reading_index"]  = i;              // 0 = paling lama, 14 = paling baru
@@ -512,7 +517,7 @@ void updateCommandStatus(const String& cmdId, const String& status,
 }
 
 // ═══════════════════════════════════════════════════════════
-//  POLLING PERINTAH (hanya saat WiFi sudah aktif = tiap 15 menit)
+//  POLLING PERINTAH (hanya saat WiFi sudah aktif = tiap 10 menit)
 // ═══════════════════════════════════════════════════════════
 
 void checkAndExecuteCommands() {
@@ -568,6 +573,21 @@ void checkAndExecuteCommands() {
     updateCommandStatus(cmdId, "executed");
     delay(500);
     ESP.restart();
+
+  } else if (command == "set_pet") {
+    // Ganti hewan aktif yang dipantau ESP32 ini
+    String newPetId = cmd.containsKey("payload") && !cmd["payload"].isNull()
+                      ? (const char*)(cmd["payload"]["pet_id"] | "")
+                      : "";
+    if (newPetId.length() > 0 && newPetId.length() < 64) {
+      newPetId.toCharArray(activePetId, sizeof(activePetId));
+      // Bersihkan buffer agar data lama tidak tercampur ke hewan baru
+      readingCount = 0;
+      Serial.printf("[CMD] Pet aktif diubah → %s\n", activePetId);
+      updateCommandStatus(cmdId, "executed");
+    } else {
+      updateCommandStatus(cmdId, "error", "pet_id tidak valid atau kosong");
+    }
 
   } else {
     updateCommandStatus(cmdId, "error", "Unknown command: " + command);
@@ -743,7 +763,7 @@ void setup() {
       WiFi.disconnect(true);
       WiFi.mode(WIFI_OFF);
     } else {
-      // Gagal connect: readingCount tetap, coba lagi 15 menit ke depan
+      // Gagal connect: readingCount tetap, coba lagi 10 menit ke depan
       // Namun agar buffer tidak overflow, reset jika sudah terlalu penuh
       Serial.println("[WiFi] Gagal — data tetap di buffer, coba siklus berikutnya.");
     }

@@ -13,7 +13,7 @@ import {
   Download, Smartphone, Monitor, Share2, ArrowDown, MoreHorizontal, Chrome,
   Zap, LogIn, Bot, Send, Key, ChevronUp, Sparkles, MessageCircle, ExternalLink,
   UserPlus, UserX, UserCog, Shield, Database, Link2, Unlink, Sliders, Hash, Users,
-  PenLine, ShieldCheck
+  PenLine, ShieldCheck, Copy, ArrowRightLeft
 } from 'lucide-react';
 import { authService, profileService, petService, scheduleService, recordService, notifService, monitoringService, deviceCommandService, adminService } from './lib/api';
 import { HibernationControlModal } from './components/HibernationControl';
@@ -1495,8 +1495,14 @@ const Dashboard = ({ pets, selectedPet, setSelectedPet, onAddPet, canAdd = false
           return { date: d.toISOString().split('T')[0], score: 75 + Math.round(Math.sin(i) * 15), reading_count: 20, avg_suhu: 38.2, avg_hr: 88, avg_spo2: 97 };
         });
       } else {
+        // Ambil device_activated_at dari pet yang bersangkutan.
+        // Jika ada, hanya data setelah timestamp itu yang dihitung —
+        // sehingga data lama dari sesi ESP32 sebelumnya tidak ikut masuk.
+        const activePet = pets.find(p => p.id === petId);
+        const activatedSince = activePet?.device_activated_at ?? null;
+
         [calc, daily] = await Promise.all([
-          monitoringService.getCalculated(petId, 20),
+          monitoringService.getCalculated(petId, 20, activatedSince),
           monitoringService.getDailyHealth(petId, 7),
         ]);
       }
@@ -5096,6 +5102,34 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
       ...p,
       userName: users.find(u => u.id === p.user_id)?.name || '(tanpa nama)',
     }));
+
+    // Kirim command set_pet ke ESP32 via device_commands
+    const handleSetPet = async (pet) => {
+      const deviceId = pet.iot_device_id;
+      if (!deviceId) {
+        showToast('Hubungkan Device ID ke hewan ini terlebih dahulu.', 'error');
+        return;
+      }
+      try {
+        await deviceCommandService.send(pet.id, deviceId, 'set_pet', { pet_id: pet.id });
+
+        // Simpan timestamp aktivasi agar getCalculated() hanya ambil data
+        // sejak saat ini — mencegah data lama hewan ini dari sesi ESP32 sebelumnya muncul.
+        const activatedAt = new Date().toISOString();
+        await supabase
+          .from('pets')
+          .update({ device_activated_at: activatedAt })
+          .eq('id', pet.id);
+
+        // Refresh daftar pets agar state lokal juga terupdate
+        await loadAdminData();
+
+        showToast(`Perintah dikirim — ESP32 "${deviceId}" akan beralih ke ${pet.name} saat wake up berikutnya.`, 'success');
+      } catch (e) {
+        showToast('Gagal mengirim perintah: ' + e.message, 'error');
+      }
+    };
+
     return (
       <div className="space-y-4">
         <p className="text-xs text-slate-500">Hubungkan ID perangkat IoT ESP32 ke hewan yang terdaftar.</p>
@@ -5118,8 +5152,18 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
                       <PawPrint size={15} className="text-white"/>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 text-sm">{pet.name} <span className="text-xs text-slate-400 font-normal">({pet.species})</span></p>
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{pet.name} <span className="text-xs text-slate-400 font-normal">({pet.species})</span></p>
                       <p className="text-xs text-slate-400 truncate">👤 {pet.userName}</p>
+                      {/* Pet ID */}
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[160px]" title={pet.id}>{pet.id}</span>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(pet.id); showToast('Pet ID disalin!', 'success'); }}
+                          className="shrink-0 w-4 h-4 flex items-center justify-center rounded text-slate-300 hover:text-indigo-500 transition-colors"
+                          title="Salin Pet ID">
+                          <Copy size={10}/>
+                        </button>
+                      </div>
                     </div>
                     {/* IoT badge */}
                     {iotSaved ? (
@@ -5138,6 +5182,15 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
                     <div className="flex items-center gap-1 shrink-0">
                       {!isEditing && (
                         <>
+                          {/* Tombol aktifkan hewan ke perangkat ini */}
+                          {pet.iot_device_id && (
+                            <button
+                              onClick={() => handleSetPet(pet)}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 transition-colors"
+                              title={`Alihkan ESP32 "${pet.iot_device_id}" ke hewan ini`}>
+                              <ArrowRightLeft size={14}/>
+                            </button>
+                          )}
                           <button onClick={() => { setEditIotPetId(pet.id); setEditIotValue(iotSaved ? pet.iot_device_id : ''); }}
                             className="w-8 h-8 flex items-center justify-center rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors" title="Set ID IoT">
                             <Link2 size={14}/>
@@ -5184,8 +5237,9 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
             })}
           </div>
         )}
-        <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
-          <p className="text-xs text-blue-700 leading-relaxed"><strong>ℹ️ Catatan:</strong> Tambahkan kolom <code className="bg-blue-100 px-1 rounded">iot_device_id text</code> ke tabel <code className="bg-blue-100 px-1 rounded">pets</code> agar fitur ini berfungsi. ID ini harus sesuai dengan <code className="bg-blue-100 px-1 rounded">device_id</code> yang dikonfigurasi di firmware ESP32.</p>
+        <div className="p-3 bg-blue-50 dark:bg-blue-500/10 rounded-2xl border border-blue-100 dark:border-blue-500/20 space-y-1.5">
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed"><strong>ℹ️ Hubungkan perangkat:</strong> Tambahkan kolom <code className="bg-blue-100 dark:bg-blue-500/20 px-1 rounded">iot_device_id text</code> ke tabel <code className="bg-blue-100 dark:bg-blue-500/20 px-1 rounded">pets</code> agar fitur ini berfungsi. ID harus sesuai dengan <code className="bg-blue-100 dark:bg-blue-500/20 px-1 rounded">DEVICE_ID</code> di firmware ESP32.</p>
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed"><strong>🔄 Ganti hewan aktif:</strong> Tombol <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-mono text-[10px]"><ArrowRightLeft size={9}/>pindah</span> mengirim perintah ke ESP32. Perangkat akan beralih ke hewan baru saat wake up berikutnya (maks. 1 menit) dan buffer lama otomatis dikosongkan.</p>
         </div>
       </div>
     );
@@ -5208,10 +5262,10 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
-            { label: 'Total Pengguna', value: users.length,          icon: '👥', color: 'bg-indigo-50 text-indigo-700' },
-            { label: 'Subscribe',      value: countByRole('Subscribe'), icon: '⭐', color: 'bg-blue-50 text-blue-700' },
-            { label: 'Demo',           value: countByRole('Demo'),      icon: '🔍', color: 'bg-amber-50 text-amber-700' },
-            { label: 'Total Hewan',    value: allPets.length,          icon: '🐾', color: 'bg-emerald-50 text-emerald-700' },
+            { label: 'Total Pengguna', value: users.length,          icon: '👥', color: 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300' },
+            { label: 'Subscribe',      value: countByRole('Subscribe'), icon: '⭐', color: 'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300' },
+            { label: 'Demo',           value: countByRole('Demo'),      icon: '🔍', color: 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300' },
+            { label: 'Total Hewan',    value: allPets.length,          icon: '🐾', color: 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
           ].map(item => (
             <div key={item.label} className={`rounded-2xl p-3 ${item.color}`}>
               <p className="text-xl mb-0.5">{item.icon}</p>
@@ -5221,24 +5275,24 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
           ))}
         </div>
 
-        <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100">
-          <p className="text-xs font-bold text-rose-700 mb-0.5">🔐 Akses Admin Aktif</p>
-          <p className="text-xs text-rose-600">Login sebagai <strong>{adminProfile?.name || adminEmail}</strong>. Gunakan dengan bijak.</p>
+        <div className="p-3 bg-rose-50 dark:bg-rose-500/15 rounded-2xl border border-rose-100 dark:border-rose-500/30">
+          <p className="text-xs font-bold text-rose-700 dark:text-rose-300 mb-0.5">🔐 Akses Admin Aktif</p>
+          <p className="text-xs text-rose-600 dark:text-rose-400">Login sebagai <strong>{adminProfile?.name || adminEmail}</strong>. Gunakan dengan bijak.</p>
         </div>
       </div>
 
       {/* Tabbed Card */}
-      <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-[28px] border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
         {/* Tab Header */}
-        <div className="flex border-b border-slate-100">
+        <div className="flex border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveAdminTab(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all ${activeAdminTab === tab.id ? 'text-indigo-600 border-b-2 border-indigo-500 bg-indigo-50/50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+              className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all ${activeAdminTab === tab.id ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-400 dark:bg-indigo-500/10' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/50 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700/50'}`}>
               <tab.icon size={15}/>{tab.label}
             </button>
           ))}
           <button onClick={loadAll} disabled={loading} title="Refresh"
-            className="px-4 flex items-center justify-center text-slate-400 hover:text-slate-600 border-l border-slate-100 hover:bg-slate-50 transition-colors">
+            className="px-4 flex items-center justify-center text-slate-400 hover:text-slate-300 border-l border-slate-100 dark:border-slate-700 hover:bg-slate-700/50 transition-colors">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''}/>
           </button>
         </div>
