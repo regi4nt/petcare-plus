@@ -5116,13 +5116,10 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
         // Simpan timestamp aktivasi agar getCalculated() hanya ambil data
         // sejak saat ini — mencegah data lama hewan ini dari sesi ESP32 sebelumnya muncul.
         const activatedAt = new Date().toISOString();
-        await supabase
-          .from('pets')
-          .update({ device_activated_at: activatedAt })
-          .eq('id', pet.id);
+        await petService.update(pet.id, { device_activated_at: activatedAt });
 
-        // Refresh daftar pets agar state lokal juga terupdate
-        await loadAdminData();
+        // Refresh daftar pets agar state lokal (allPets) juga terupdate
+        await loadAll();
 
         showToast(`Perintah dikirim — ESP32 "${deviceId}" akan beralih ke ${pet.name} saat wake up berikutnya.`, 'success');
       } catch (e) {
