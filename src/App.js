@@ -4828,26 +4828,6 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
         </div>
       )}
 
-      {/* Confirm Delete */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.4)'}}>
-          <div className="bg-white rounded-[24px] p-6 w-full max-w-sm shadow-2xl text-center">
-            <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Trash2 size={20} className="text-rose-500"/>
-            </div>
-            <h3 className="font-black text-slate-800 mb-1">Hapus Data?</h3>
-            <p className="text-sm text-slate-500 mb-5">Data <strong>{confirmDelete.name}</strong> akan dihapus permanen.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">Batal</button>
-              <button onClick={() => handleDeletePet(confirmDelete.id)} disabled={!!updating}
-                className="flex-1 py-2.5 rounded-xl bg-rose-500 text-white text-sm font-bold hover:bg-rose-600 disabled:opacity-60">
-                Hapus
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* User List */}
       {loading ? (
         <div className="flex items-center justify-center py-10 text-slate-400"><Loader2 size={22} className="animate-spin mr-2"/> Memuat…</div>
@@ -5244,15 +5224,35 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
 
   return (
     <div className="space-y-6">
+      {/* ── Modal Hapus Global (dipakai tab Akun & ID IoT) ── */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
+          <div className="bg-white dark:bg-slate-800 rounded-[24px] p-6 w-full max-w-sm shadow-2xl text-center">
+            <div className="w-12 h-12 bg-rose-100 dark:bg-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Trash2 size={20} className="text-rose-500"/>
+            </div>
+            <h3 className="font-black text-slate-800 dark:text-slate-100 mb-1">Hapus Data?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Data <strong>{confirmDelete.name}</strong> akan dihapus permanen.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Batal</button>
+              <button onClick={() => handleDeletePet(confirmDelete.id)} disabled={!!updating}
+                className="flex-1 py-2.5 rounded-xl bg-rose-500 text-white text-sm font-bold hover:bg-rose-600 disabled:opacity-60">
+                Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-[28px] border border-slate-100 dark:border-slate-700 p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 bg-rose-100 rounded-2xl flex items-center justify-center shrink-0">
-            <ShieldCheck size={20} className="text-rose-600"/>
+          <div className="w-10 h-10 bg-rose-100 dark:bg-rose-500/20 rounded-2xl flex items-center justify-center shrink-0">
+            <ShieldCheck size={20} className="text-rose-600 dark:text-rose-400"/>
           </div>
           <div>
-            <h2 className="font-black text-slate-800 text-xl">Panel Admin</h2>
-            <p className="text-xs text-slate-500">Manajemen sistem & pengguna</p>
+            <h2 className="font-black text-slate-800 dark:text-slate-100 text-xl">Panel Admin</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Manajemen sistem & pengguna</p>
           </div>
         </div>
 
@@ -5284,12 +5284,12 @@ const AdminPanel = ({ adminProfile, adminEmail, showToast }) => {
         <div className="flex border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
           {TABS.map(tab => (
             <button key={tab.id} onClick={() => setActiveAdminTab(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all ${activeAdminTab === tab.id ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-400 dark:bg-indigo-500/10' : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/50 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700/50'}`}>
+              className={`flex-1 flex items-center justify-center gap-2 py-4 text-sm font-bold transition-all ${activeAdminTab === tab.id ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-400 dark:bg-indigo-500/10' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700/50'}`}>
               <tab.icon size={15}/>{tab.label}
             </button>
           ))}
           <button onClick={loadAll} disabled={loading} title="Refresh"
-            className="px-4 flex items-center justify-center text-slate-400 hover:text-slate-300 border-l border-slate-100 dark:border-slate-700 hover:bg-slate-700/50 transition-colors">
+            className="px-4 flex items-center justify-center text-slate-500 hover:text-slate-700 border-l border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:text-slate-300 dark:hover:bg-slate-700/50 transition-colors">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''}/>
           </button>
         </div>
